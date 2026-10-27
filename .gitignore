@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+_downloads/
+publish/
+installer/Output/
+tools/innosetup/
