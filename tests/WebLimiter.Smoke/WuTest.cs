@@ -86,7 +86,7 @@ internal static class WuTest
         p.WaitForExit(10_000);
     }
 
-    private static string Bits(int seconds)
+    internal static string Bits(int seconds)
     {
         string target = Path.Combine(Path.GetTempPath(), "weblimiter-wu.tmp");
         var p = Process.Start(new ProcessStartInfo("bitsadmin.exe",

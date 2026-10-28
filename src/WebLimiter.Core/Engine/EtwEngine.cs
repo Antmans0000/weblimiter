@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Collections.Concurrent;
 using WebLimiter.Core.Model;
 using WebLimiter.Core.Native;
 using WebLimiter.Core.Storage;
@@ -14,12 +15,14 @@ public sealed unsafe class EtwEngine : EngineBase
 {
     private readonly QosLimiter _qos = new();
     private readonly Dictionary<string, List<ulong>> _blocks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, EndpointBlock> _endpoints = new();
     private readonly object _enforceLock = new();
     private EtwSession? _etw;
     private WfpSession? _wfp;
     private Timer? _enforceTimer;
     private int _enforcing;
     private volatile bool _dirty = true;
+    private const long EndpointIdleMs = 60_000;
 
     public EtwEngine(RuleStore rules, StatsStore stats) : base(rules, stats) { }
 
@@ -45,7 +48,7 @@ public sealed unsafe class EtwEngine : EngineBase
         Rules.Changed += MarkDirty;
         BeginTicking();
         _qos.ClearAll();
-        _enforceTimer = new Timer(_ => Enforce(), null, 500, 1000);
+        _enforceTimer = new Timer(_ => Enforce(), null, 300, 300);
     }
 
     public override void Stop()
@@ -64,6 +67,7 @@ public sealed unsafe class EtwEngine : EngineBase
             _wfp?.Dispose();
             _wfp = null;
             _blocks.Clear();
+            _endpoints.Clear();
             _qos.ClearAll();
         }
         ResetSnapshot();
@@ -115,6 +119,42 @@ public sealed unsafe class EtwEngine : EngineBase
         conn.LastSeen = Environment.TickCount64;
         app.Counter.Add(outbound, size);
         conn.Add(outbound, size);
+
+        if (app.Blocked && app.Services.Length > 0 && app.ExePath != null) TrackEndpoint(app, remoteBytes, remotePort);
+    }
+
+    /// <summary>
+    /// WFP cannot tell the services of a shared svchost apart (they connect while impersonating a user),
+    /// so a blocked service gets its remote endpoints blocked for that executable as they are seen.
+    /// </summary>
+    private void TrackEndpoint(AppTraffic app, ReadOnlySpan<byte> address, ushort port)
+    {
+        string key = $"{app.ExePath}|{Convert.ToHexString(address)}|{port}";
+        if (_endpoints.TryGetValue(key, out var existing))
+        {
+            existing.LastSeen = Environment.TickCount64;
+            return;
+        }
+        _endpoints.TryAdd(key, new EndpointBlock(app.Path, app.ExePath!, address.ToArray(), port));
+    }
+
+    private sealed class EndpointBlock
+    {
+        public EndpointBlock(string appPath, string exe, byte[] address, ushort port)
+        {
+            AppPath = appPath;
+            Exe = exe;
+            Address = address;
+            Port = port;
+        }
+
+        public string AppPath { get; }
+        public string Exe { get; }
+        public byte[] Address { get; }
+        public ushort Port { get; }
+        public volatile bool Applied;
+        public List<ulong> Ids = new();
+        public long LastSeen = Environment.TickCount64;
     }
 
     private static bool IsLoopback(UInt128 remote, bool v6) =>
@@ -124,85 +164,84 @@ public sealed unsafe class EtwEngine : EngineBase
 
     private void Enforce()
     {
-        if (!_dirty || Interlocked.Exchange(ref _enforcing, 1) == 1) return;
+        if (Interlocked.Exchange(ref _enforcing, 1) == 1) return;
         try
         {
-            _dirty = false;
             lock (_enforceLock)
             {
                 if (_wfp == null) return;
-                ReconcileBlocks();
-                _qos.Apply(DesiredUploadLimits());
+                if (_dirty)
+                {
+                    _dirty = false;
+                    ReconcileBlocks();
+                    _qos.Apply(DesiredUploadLimits());
+                }
+                ReconcileEndpoints();
             }
         }
         catch (Exception ex) { DataPaths.LogError("Application des règles", ex); }
         finally { Volatile.Write(ref _enforcing, 0); }
     }
 
+    private void ReconcileEndpoints()
+    {
+        long now = Environment.TickCount64;
+        foreach (var (key, ep) in _endpoints)
+        {
+            bool stillBlocked = Apps.TryGetValue(ep.AppPath, out var app) && app.Blocked;
+            if (!stillBlocked || now - ep.LastSeen > EndpointIdleMs)
+            {
+                if (ep.Applied) _wfp!.Remove(ep.Ids);
+                _endpoints.TryRemove(key, out _);
+                continue;
+            }
+            if (ep.Applied) continue;
+            ep.Applied = true; // a failure is not retried every tick
+            try { ep.Ids = _wfp!.BlockEndpoint(ep.Exe, ep.Address, ep.Port); }
+            catch (Exception ex) { DataPaths.LogError($"Blocage de destination impossible ({key})", ex); }
+        }
+    }
+
     private void ReconcileBlocks()
     {
         var desired = DesiredBlocks();
-        foreach (var key in _blocks.Keys.Where(k => !desired.Contains(k)).ToList())
+        foreach (var path in _blocks.Keys.Where(k => !desired.Contains(k)).ToList())
         {
-            _wfp!.Remove(_blocks[key]);
-            _blocks.Remove(key);
+            _wfp!.Remove(_blocks[path]);
+            _blocks.Remove(path);
         }
-        foreach (var key in desired)
+        foreach (var path in desired)
         {
-            if (_blocks.ContainsKey(key)) continue;
-            try
-            {
-                int sep = key.IndexOf('|');
-                string service = key[..sep];
-                string exe = key[(sep + 1)..];
-                _blocks[key] = _wfp!.Block(exe, service.Length == 0 ? null : service);
-            }
+            if (_blocks.ContainsKey(path)) continue;
+            try { _blocks[path] = _wfp!.BlockExe(path); }
             catch (Exception ex)
             {
-                DataPaths.LogError($"Blocage impossible ({key})", ex);
-                _blocks[key] = new List<ulong>(); // do not retry every second
+                DataPaths.LogError($"Blocage impossible ({path})", ex);
+                _blocks[path] = new List<ulong>(); // do not retry every tick
             }
         }
     }
 
-    /// <summary>Keys "service|exePath" ("|exePath" blocks every process of the executable).</summary>
+    /// <summary>Executables blocked as a whole. Services of a shared host are handled per endpoint.</summary>
     private HashSet<string> DesiredBlocks()
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        string svchost = Path.Combine(Environment.SystemDirectory, "svchost.exe");
-
         foreach (var rule in Rules.All())
-            if (rule.Blocked) AddTargets(set, rule.AppPath, svchost);
-
+            if (rule.Blocked && IsFile(rule.AppPath)) set.Add(rule.AppPath);
         foreach (var app in AppList)
-        {
-            if (!app.Blocked) continue;
-            if (app.Services.Length > 0)
-            {
-                string exe = app.ExePath ?? svchost;
-                foreach (var svc in app.Services) set.Add($"{svc}|{exe}");
-            }
-            else if (File.Exists(app.Path)) set.Add("|" + app.Path);
-        }
+            if (app.Blocked && app.Services.Length == 0 && IsFile(app.Path)) set.Add(app.Path);
+        // A rule on svchost.exe itself blocks every service, as with the WinDivert engine.
         return set;
     }
 
-    private static void AddTargets(HashSet<string> set, string key, string svchost)
-    {
-        if (key.StartsWith(ServiceCatalog.KeyPrefix, StringComparison.OrdinalIgnoreCase))
-        {
-            foreach (var svc in key[ServiceCatalog.KeyPrefix.Length..].Split('+', StringSplitOptions.RemoveEmptyEntries))
-                set.Add($"{svc}|{svchost}");
-        }
-        else if (Path.IsPathRooted(key) && File.Exists(key)) set.Add("|" + key);
-    }
+    private static bool IsFile(string path) => Path.IsPathRooted(path) && File.Exists(path);
 
     private Dictionary<string, long> DesiredUploadLimits()
     {
         var limits = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         void Add(string path, long rate)
         {
-            if (rate <= 0 || !Path.IsPathRooted(path) || !File.Exists(path)) return;
+            if (rate <= 0 || !IsFile(path)) return;
             limits[path] = limits.TryGetValue(path, out long cur) ? Math.Min(cur, rate) : rate;
         }
 
