@@ -52,7 +52,8 @@ internal sealed class QosLimiter
         {
             var psi = new ProcessStartInfo("powershell.exe",
                 "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " +
-                Convert.ToBase64String(Encoding.Unicode.GetBytes(script)))
+                Convert.ToBase64String(Encoding.Unicode.GetBytes("$ProgressPreference='SilentlyContinue'
+" + script)))
             {
                 CreateNoWindow = true,
                 UseShellExecute = false,
@@ -61,7 +62,7 @@ internal sealed class QosLimiter
             using var p = Process.Start(psi)!;
             string err = p.StandardError.ReadToEnd();
             p.WaitForExit(30_000);
-            if (p.ExitCode != 0 || err.Length > 0) DataPaths.LogError("Stratégie QoS", new Exception(err));
+            if (p.ExitCode != 0) DataPaths.LogError("Stratégie QoS", new Exception(err));
         }
         catch (Exception ex) { DataPaths.LogError("Stratégie QoS impossible", ex); }
     }
