@@ -98,133 +98,164 @@
                                    Text="Limites en Ko/s — Entrée pour valider" />
                     </DockPanel>
 
-                    <DataGrid Grid.Row="1" x:Name="AppsGrid" ItemsSource="{Binding AppsView}" SelectedItem="{Binding Selected}"
-                              Margin="8,0,8,0">
-                        <DataGrid.RowStyle>
-                            <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsActive}" Value="False">
-                                        <Setter Property="Foreground" Value="{StaticResource Muted}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </DataGrid.RowStyle>
-                        <DataGrid.Columns>
-                            <DataGridTemplateColumn Header="Application" Width="*" MinWidth="200" SortMemberPath="Name">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" ToolTip="{Binding Path}">
-                                            <Grid Width="18" Height="18" Margin="0,0,8,0">
-                                                <Border CornerRadius="4" Background="{StaticResource Panel2}" />
-                                                <Image Source="{Binding Icon}" Width="16" Height="16" />
-                                            </Grid>
-                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                            <Border Background="{StaticResource Danger}" CornerRadius="3" Padding="5,0" Margin="8,0,0,0"
-                                                    VerticalAlignment="Center"
-                                                    Visibility="{Binding EngineBlocked, Converter={StaticResource BoolToVis}}">
-                                                <TextBlock Text="BLOQUÉ" FontSize="10" FontWeight="SemiBold" Foreground="White" />
-                                            </Border>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                    <Grid Grid.Row="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
 
-                            <DataGridTemplateColumn Header="↓ Débit" Width="95" SortMemberPath="DownRate">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding DownRateText}" Foreground="{StaticResource Down}" Style="{StaticResource RightCell}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                        <Border Grid.Row="0" Margin="8,0,8,2" Background="{StaticResource Panel2}" CornerRadius="4" Padding="8,6,0,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="200" />
+                                    <ColumnDefinition Width="95" />
+                                    <ColumnDefinition Width="95" />
+                                    <ColumnDefinition Width="135" />
+                                    <ColumnDefinition Width="135" />
+                                    <ColumnDefinition Width="70" />
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="80" />
+                                    <ColumnDefinition Width="80" />
+                                    <ColumnDefinition Width="55" />
+                                    <ColumnDefinition Width="17" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="{Binding TotalDownText}" Foreground="{StaticResource Down}" FontWeight="SemiBold" Style="{StaticResource RightCell}" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="2" Text="{Binding TotalUpText}" Foreground="{StaticResource Up}" FontWeight="SemiBold" Style="{StaticResource RightCell}" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="7" Text="{Binding TotalTodayDownText}" FontWeight="SemiBold" Style="{StaticResource RightCell}" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="8" Text="{Binding TotalTodayUpText}" FontWeight="SemiBold" Style="{StaticResource RightCell}" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="9" Text="{Binding TotalConnections}" FontWeight="SemiBold" Style="{StaticResource RightCell}" Margin="0,0,8,0" />
+                            </Grid>
+                        </Border>
 
-                            <DataGridTemplateColumn Header="↑ Débit" Width="95" SortMemberPath="UpRate">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding UpRateText}" Foreground="{StaticResource Up}" Style="{StaticResource RightCell}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                        <DataGrid Grid.Row="1" x:Name="AppsGrid" ItemsSource="{Binding AppsView}" SelectedItem="{Binding Selected}"
+                                  Margin="8,0,8,0" ScrollViewer.VerticalScrollBarVisibility="Visible">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsActive}" Value="False">
+                                            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="Application" Width="*" MinWidth="200" SortMemberPath="Name">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal" ToolTip="{Binding Path}">
+                                                <Grid Width="18" Height="18" Margin="0,0,8,0">
+                                                    <Border CornerRadius="4" Background="{StaticResource Panel2}" />
+                                                    <Image Source="{Binding Icon}" Width="16" Height="16" />
+                                                </Grid>
+                                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <Border Background="{StaticResource Danger}" CornerRadius="3" Padding="5,0" Margin="8,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Visibility="{Binding EngineBlocked, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="BLOQUÉ" FontSize="10" FontWeight="SemiBold" Foreground="White" />
+                                                </Border>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Limite ↓" Width="135" SortMemberPath="DownLimitEnabled">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <CheckBox IsChecked="{Binding DownLimitEnabled, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0" />
-                                            <TextBox Style="{StaticResource LimitBox}" Text="{Binding DownLimitKb}"
-                                                     IsEnabled="{Binding DownLimitEnabled}" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="↓ Débit" Width="95" SortMemberPath="DownRate">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DownRateText}" Foreground="{StaticResource Down}" Style="{StaticResource RightCell}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Limite ↑" Width="135" SortMemberPath="UpLimitEnabled">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal">
-                                            <CheckBox IsChecked="{Binding UpLimitEnabled, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0" />
-                                            <TextBox Style="{StaticResource LimitBox}" Text="{Binding UpLimitKb}"
-                                                     IsEnabled="{Binding UpLimitEnabled}" />
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="↑ Débit" Width="95" SortMemberPath="UpRate">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding UpRateText}" Foreground="{StaticResource Up}" Style="{StaticResource RightCell}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Bloquer" Width="70" SortMemberPath="Blocked">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <CheckBox Style="{StaticResource BlockSwitch}"
-                                                  IsChecked="{Binding Blocked, UpdateSourceTrigger=PropertyChanged}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Limite ↓" Width="135" SortMemberPath="DownLimitEnabled">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <CheckBox IsChecked="{Binding DownLimitEnabled, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0" />
+                                                <TextBox Style="{StaticResource LimitBox}" Text="{Binding DownLimitKb}"
+                                                         IsEnabled="{Binding DownLimitEnabled}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Quota" Width="160" SortMemberPath="QuotaEnabled">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <Button Click="EditQuota_Click" HorizontalAlignment="Left" ToolTip="Définir un quota">
-                                            <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource CellButton}">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding QuotaEnabled}" Value="True">
-                                                            <Setter Property="Foreground" Value="{StaticResource Text}" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding QuotaExceeded}" Value="True">
-                                                            <Setter Property="Foreground" Value="{StaticResource Danger}" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Button.Style>
-                                            <TextBlock Text="{Binding QuotaText}" TextTrimming="CharacterEllipsis" />
-                                        </Button>
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Limite ↑" Width="135" SortMemberPath="UpLimitEnabled">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Orientation="Horizontal">
+                                                <CheckBox IsChecked="{Binding UpLimitEnabled, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0" />
+                                                <TextBox Style="{StaticResource LimitBox}" Text="{Binding UpLimitKb}"
+                                                         IsEnabled="{Binding UpLimitEnabled}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Auj. ↓" Width="80" SortMemberPath="TodayDown">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding TodayDownText}" Style="{StaticResource RightCell}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Bloquer" Width="70" SortMemberPath="Blocked">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Style="{StaticResource BlockSwitch}"
+                                                      IsChecked="{Binding Blocked, UpdateSourceTrigger=PropertyChanged}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Auj. ↑" Width="80" SortMemberPath="TodayUp">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding TodayUpText}" Style="{StaticResource RightCell}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
+                                <DataGridTemplateColumn Header="Quota" Width="160" SortMemberPath="QuotaEnabled">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Click="EditQuota_Click" HorizontalAlignment="Left" ToolTip="Définir un quota">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource CellButton}">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding QuotaEnabled}" Value="True">
+                                                                <Setter Property="Foreground" Value="{StaticResource Text}" />
+                                                            </DataTrigger>
+                                                            <DataTrigger Binding="{Binding QuotaExceeded}" Value="True">
+                                                                <Setter Property="Foreground" Value="{StaticResource Danger}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                                <TextBlock Text="{Binding QuotaText}" TextTrimming="CharacterEllipsis" />
+                                            </Button>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
 
-                            <DataGridTemplateColumn Header="Conn." Width="55" SortMemberPath="Connections">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding Connections}" Style="{StaticResource RightCell}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                        </DataGrid.Columns>
-                    </DataGrid>
+                                <DataGridTemplateColumn Header="Auj. ↓" Width="80" SortMemberPath="TodayDown">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding TodayDownText}" Style="{StaticResource RightCell}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <DataGridTemplateColumn Header="Auj. ↑" Width="80" SortMemberPath="TodayUp">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding TodayUpText}" Style="{StaticResource RightCell}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+
+                                <DataGridTemplateColumn Header="Conn." Width="55" SortMemberPath="Connections">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Connections}" Style="{StaticResource RightCell}" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
 
                     <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch" Height="1" VerticalAlignment="Center" />
 

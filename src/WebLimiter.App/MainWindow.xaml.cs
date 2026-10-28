@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel;
+using System.Windows.Data;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,6 +18,7 @@ public partial class MainWindow : Window
     public MainWindow(MainViewModel vm)
     {
         InitializeComponent();
+        AppsGrid.Sorting += OnSorting;
         _vm = vm;
         DataContext = vm;
         vm.Refreshed += () => Graph.Invalidate();
@@ -82,5 +85,33 @@ public partial class MainWindow : Window
             "Effacer tout l'historique de consommation ? Les quotas repartiront de zéro.\nCette action est définitive.",
             "Effacer l'historique", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         if (answer == MessageBoxResult.Yes) _vm.Stats.Clear();
+    }
+
+    /// <summary>Numeric columns sort largest first on the first click; the name column starts A→Z.</summary>
+    private void OnSorting(object sender, DataGridSortingEventArgs e)
+    {
+        e.Handled = true;
+        string member = e.Column.SortMemberPath;
+        if (string.IsNullOrEmpty(member)) return;
+
+        bool text = member == nameof(AppRowViewModel.Name);
+        var first = text ? ListSortDirection.Ascending : ListSortDirection.Descending;
+        var next = e.Column.SortDirection switch
+        {
+            null => first,
+            ListSortDirection.Ascending => ListSortDirection.Descending,
+            _ => ListSortDirection.Ascending,
+        };
+
+        var view = (ListCollectionView)_vm.AppsView;
+        using (view.DeferRefresh())
+        {
+            view.SortDescriptions.Clear();
+            view.SortDescriptions.Add(new SortDescription(member, next));
+            if (!text) view.SortDescriptions.Add(new SortDescription(nameof(AppRowViewModel.Name), ListSortDirection.Ascending));
+            if (!view.LiveSortingProperties.Contains(member)) view.LiveSortingProperties.Add(member);
+        }
+        foreach (var c in AppsGrid.Columns) c.SortDirection = null;
+        e.Column.SortDirection = next;
     }
 }

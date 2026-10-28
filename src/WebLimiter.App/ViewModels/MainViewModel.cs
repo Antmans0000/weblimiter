@@ -100,6 +100,11 @@ public sealed class MainViewModel : ObservableObject
     public string TotalUpText { get => _totalUpText; private set => Set(ref _totalUpText, value); }
     public string Status { get => _status; set => Set(ref _status, value); }
 
+    private string _totalTodayDownText = "", _totalTodayUpText = "", _totalConnections = "";
+    public string TotalTodayDownText { get => _totalTodayDownText; private set => Set(ref _totalTodayDownText, value); }
+    public string TotalTodayUpText { get => _totalTodayUpText; private set => Set(ref _totalTodayUpText, value); }
+    public string TotalConnections { get => _totalConnections; private set => Set(ref _totalConnections, value); }
+
     private BackendStatus _backendStatus = new(false, false, null, false);
     public bool IsRunning => _backendStatus.IsRunning;
     public bool IsServiceMode => _backendStatus.IsService;
@@ -156,6 +161,10 @@ public sealed class MainViewModel : ObservableObject
         TotalHistory.Push(snap.TotalDownRate, snap.TotalUpRate);
         TotalDownText = Format.Rate(snap.TotalDownRate) is { Length: > 0 } d ? d : "0 o/s";
         TotalUpText = Format.Rate(snap.TotalUpRate) is { Length: > 0 } u ? u : "0 o/s";
+        long todayDown = today.Values.Sum(u => u.Down), todayUp = today.Values.Sum(u => u.Up);
+        TotalTodayDownText = todayDown > 0 ? Format.Bytes(todayDown) : "";
+        TotalTodayUpText = todayUp > 0 ? Format.Bytes(todayUp) : "";
+        TotalConnections = snap.Apps.Sum(a => a.Connections).ToString();
         string where = _backendStatus.IsService ? "service Windows" : "moteur intégré";
         Status = IsRunning
             ? $"Filtrage actif ({where}) — {snap.Apps.Count(a => a.Connections > 0)} applications connectées"
