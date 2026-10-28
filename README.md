@@ -3,9 +3,11 @@
 Surveillance, limitation de débit, blocage et quotas du trafic réseau **par application** sous Windows,
 dans l'esprit de NetLimiter.
 
-**Télécharger :** l'installateur est disponible dans les [Releases](../../releases/latest)
-(Windows 10/11 64 bits, aucun prérequis). Le setup n'est pas signé : Windows SmartScreen peut afficher un
-avertissement (« Informations complémentaires » → « Exécuter quand même »).
+## ⬇️ [Télécharger l'installateur (WebLimiter-Setup.exe)](https://github.com/Antmans0000/weblimiter/releases/latest/download/WebLimiter-Setup.exe)
+
+Un clic télécharge le setup, il suffit de le lancer (Windows 10/11 64 bits, aucun prérequis : .NET est inclus).
+Le setup n'est pas signé : Windows SmartScreen peut afficher un avertissement
+(« Informations complémentaires » → « Exécuter quand même »). Versions précédentes : [Releases](../../releases).
 
 ## Fonctions
 
@@ -75,7 +77,8 @@ Options : `--tray` (démarre réduit dans la zone de notification), `--service` 
 `installer/build.ps1` publie l'application en autonome (.NET inclus) puis compile `installer/WebLimiter.iss`
 avec [Inno Setup 6](https://jrsoftware.org/isinfo.php), attendu dans `tools/innosetup/`.
 Résultat : `installer/Output/WebLimiter-Setup-<version>.exe`, qui installe l'application dans Program Files
-et le service `WebLimiter`.
+et le service `WebLimiter`. À chaque release, joindre aussi une copie nommée `WebLimiter-Setup.exe` :
+c'est elle que vise le lien de téléchargement direct (`releases/latest/download/WebLimiter-Setup.exe`).
 
 ## Limites connues
 
