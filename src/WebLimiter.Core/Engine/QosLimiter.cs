@@ -52,8 +52,7 @@ internal sealed class QosLimiter
         {
             var psi = new ProcessStartInfo("powershell.exe",
                 "-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand " +
-                Convert.ToBase64String(Encoding.Unicode.GetBytes("$ProgressPreference='SilentlyContinue'
-" + script)))
+                Convert.ToBase64String(Encoding.Unicode.GetBytes("$ProgressPreference='SilentlyContinue'; " + script)))
             {
                 CreateNoWindow = true,
                 UseShellExecute = false,
