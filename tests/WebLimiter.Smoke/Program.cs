@@ -6,6 +6,7 @@ using WebLimiter.Core.Engine;
 using WebLimiter.Core.Model;
 using WebLimiter.Core.Storage;
 
+if (args.Length > 1 && args[0] == "etw") { EtwTest.Run(args[1]); return; }
 if (args.Length > 0 && args[0] == "bits") { BitsTest.Run(); return; }
 if (args.Length > 0 && args[0] == "service") { ServiceTest.Run(); return; }
 if (args.Length > 2 && args[0] == "ui") { UiServiceTest.Run(args[1], args[2]); return; }

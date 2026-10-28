@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using WebLimiter.Core.Engine;
 using WebLimiter.Core.Model;
 using WebLimiter.Core.Storage;
@@ -27,17 +28,22 @@ public interface IBackend : IDisposable
 /// <summary>Engine hosted in the current process (UI without service, or the service itself).</summary>
 public sealed class LocalBackend : IBackend
 {
-    private readonly TrafficEngine _engine;
+    private readonly EngineBase _engine;
     private readonly bool _isService;
     private string? _error;
 
     public LocalBackend(bool isService = false)
     {
         _isService = isService;
-        _engine = new TrafficEngine(RuleStore.Load(), StatsStore.Load());
+        var rules = RuleStore.Load();
+        var stats = StatsStore.Load();
+        // WinDivert ships x64 kernel drivers only, which Windows on ARM64 refuses to load.
+        _engine = RuntimeInformation.OSArchitecture == Architecture.Arm64
+            ? new EtwEngine(rules, stats)
+            : new TrafficEngine(rules, stats);
     }
 
-    public TrafficEngine Engine => _engine;
+    public EngineBase Engine => _engine;
 
     public BackendStatus GetStatus() => new(true, _engine.IsRunning, _error, _isService);
     public EngineSnapshot GetSnapshot() => _engine.Snapshot;

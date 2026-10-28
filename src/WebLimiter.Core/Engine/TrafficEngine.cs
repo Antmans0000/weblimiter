@@ -33,47 +33,22 @@ public sealed class WinDivertException : Exception
 /// Diverts every non-loopback IP packet through user mode, attributes it to a process,
 /// accounts it, and then drops it (block), delays it (rate limit) or reinjects it.
 /// </summary>
-public sealed unsafe class TrafficEngine : IDisposable
+public sealed unsafe class TrafficEngine : EngineBase
 {
     private const int PacketBufferSize = 4 * 1024 * 1024;
     private const int AddrSize = 80;
-    private const long ConnectionIdleMs = 30_000;
 
     private readonly PortOwnerTable _ports = new();
-    private readonly ProcessResolver _processes = new();
-    private readonly ConcurrentDictionary<string, AppTraffic> _apps = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<int, AppTraffic> _byPid = new();
-    private AppTraffic[] _appList = Array.Empty<AppTraffic>();
 
     private IntPtr _net = WinDivertNative.InvalidHandle;
     private IntPtr _sock = WinDivertNative.InvalidHandle;
     private Thread? _netThread, _sockThread, _schedThread;
-    private Timer? _timer;
-    private readonly Stopwatch _tickClock = new();
-    private long _tickCount;
-    private volatile bool _running;
-    private volatile EngineSnapshot _snapshot = EngineSnapshot.Empty;
 
-    public TrafficEngine(RuleStore rules, StatsStore stats)
+    public TrafficEngine(RuleStore rules, StatsStore stats) : base(rules, stats) { }
+
+    public override void Start()
     {
-        Rules = rules;
-        Stats = stats;
-    }
-
-    public RuleStore Rules { get; }
-    public StatsStore Stats { get; }
-    public bool IsRunning => _running;
-    public EngineSnapshot Snapshot => _snapshot;
-
-    /// <summary>Optional diagnostic sink (socket events, attribution decisions).</summary>
-    public Action<string>? Trace { get; set; }
-
-    /// <summary>Raised once per second on a thread-pool thread.</summary>
-    public event Action<EngineSnapshot>? Updated;
-
-    public void Start()
-    {
-        if (_running) return;
+        if (Running) return;
         _ports.Refresh();
 
         _net = Open("!loopback", WinDivertLayer.Network, 0, WinDivertFlags.None);
@@ -92,26 +67,22 @@ public sealed unsafe class TrafficEngine : IDisposable
             DataPaths.LogError("Couche SOCKET indisponible", ex);
         }
 
-        _running = true;
+        Running = true;
         Win32.timeBeginPeriod(1);
-        Rules.Changed += ApplyAllRules;
 
         _netThread = StartThread(NetworkLoop, "WebLimiter.Network", ThreadPriority.AboveNormal);
         _schedThread = StartThread(SchedulerLoop, "WebLimiter.Scheduler", ThreadPriority.AboveNormal);
         if (_sock != WinDivertNative.InvalidHandle)
             _sockThread = StartThread(SocketLoop, "WebLimiter.Socket", ThreadPriority.Normal);
 
-        _tickClock.Restart();
-        _timer = new Timer(_ => Tick(), null, 1000, 1000);
+        BeginTicking();
     }
 
-    public void Stop()
+    public override void Stop()
     {
-        if (!_running) return;
-        _running = false;
-        Rules.Changed -= ApplyAllRules;
-        _timer?.Dispose();
-        _timer = null;
+        if (!Running) return;
+        Running = false;
+        EndTicking();
 
         foreach (var h in new[] { _net, _sock })
             if (h != WinDivertNative.InvalidHandle) WinDivertNative.WinDivertShutdown(h, 3);
@@ -122,30 +93,13 @@ public sealed unsafe class TrafficEngine : IDisposable
             if (h != WinDivertNative.InvalidHandle) WinDivertNative.WinDivertClose(h);
         _net = _sock = WinDivertNative.InvalidHandle;
 
-        foreach (var app in _appList)
+        foreach (var app in AppList)
         {
             app.DownShaper.Clear();
             app.UpShaper.Clear();
         }
         Win32.timeEndPeriod(1);
-        Stats.Save();
-        _snapshot = EngineSnapshot.Empty;
-    }
-
-    public void Dispose() => Stop();
-
-    public IReadOnlyList<ConnectionSnapshot> GetConnections(string appPath)
-    {
-        if (!_apps.TryGetValue(appPath, out var app)) return Array.Empty<ConnectionSnapshot>();
-        return app.Connections
-            .Select(kv => new ConnectionSnapshot(
-                kv.Key.Proto switch { 6 => "TCP", 17 => "UDP", 1 => "ICMP", 58 => "ICMPv6", var p => $"IP/{p}" },
-                kv.Key.LocalPort, kv.Key.RemoteAddress().ToString(), kv.Key.RemotePort,
-                kv.Value.DownRate, kv.Value.UpRate,
-                Interlocked.Read(ref kv.Value.Down), Interlocked.Read(ref kv.Value.Up)))
-            .OrderByDescending(c => c.DownRate + c.UpRate)
-            .ThenByDescending(c => c.TotalDown + c.TotalUp)
-            .ToList();
+        ResetSnapshot();
     }
 
     private static IntPtr Open(string filter, WinDivertLayer layer, short priority, WinDivertFlags flags)
@@ -172,14 +126,14 @@ public sealed unsafe class TrafficEngine : IDisposable
         var addrs = (WinDivertAddress*)NativeMemory.Alloc(WinDivertNative.BatchMax * AddrSize);
         try
         {
-            while (_running)
+            while (Running)
             {
                 uint addrLen = WinDivertNative.BatchMax * AddrSize;
                 if (!WinDivertNative.WinDivertRecvEx(_net, buffer, PacketBufferSize, out uint recvLen, 0,
                         addrs, ref addrLen, IntPtr.Zero))
                 {
                     int err = Marshal.GetLastWin32Error();
-                    if (!_running || err is WinDivertNative.ErrorNoData or WinDivertNative.ErrorInvalidHandle
+                    if (!Running || err is WinDivertNative.ErrorNoData or WinDivertNative.ErrorInvalidHandle
                             or WinDivertNative.ErrorOperationAborted) break;
                     continue;
                 }
@@ -275,30 +229,12 @@ public sealed unsafe class TrafficEngine : IDisposable
         return len <= 0 || len > remaining ? (int)remaining : len;
     }
 
-    private AppTraffic AppFor(int pid)
-    {
-        if (_byPid.TryGetValue(pid, out var app)) return app;
-        var id = _processes.Resolve(pid);
-        app = _apps.GetOrAdd(id.Path, path =>
-        {
-            var created = new AppTraffic(path, id.Name, id.Services, id.ExePath);
-            ApplyRule(created, DateTime.Now);
-            return created;
-        });
-        lock (_apps)
-        {
-            if (!_appList.Contains(app)) _appList = _appList.Append(app).ToArray();
-        }
-        _byPid[pid] = app;
-        return app;
-    }
-
     private void SchedulerLoop()
     {
         var ready = new List<HeldPacket>(512);
-        while (_running)
+        while (Running)
         {
-            foreach (var app in _appList)
+            foreach (var app in AppList)
             {
                 if (app.DownShaper.HasQueue) app.DownShaper.Release(ready, app.Blocked);
                 if (app.UpShaper.HasQueue) app.UpShaper.Release(ready, app.Blocked);
@@ -324,13 +260,13 @@ public sealed unsafe class TrafficEngine : IDisposable
         var addrs = (WinDivertAddress*)NativeMemory.Alloc(WinDivertNative.BatchMax * AddrSize);
         try
         {
-            while (_running)
+            while (Running)
             {
                 uint addrLen = WinDivertNative.BatchMax * AddrSize;
                 if (!WinDivertNative.WinDivertRecvEx(_sock, null, 0, out _, 0, addrs, ref addrLen, IntPtr.Zero))
                 {
                     int err = Marshal.GetLastWin32Error();
-                    if (!_running || err is WinDivertNative.ErrorNoData or WinDivertNative.ErrorInvalidHandle
+                    if (!Running || err is WinDivertNative.ErrorNoData or WinDivertNative.ErrorInvalidHandle
                             or WinDivertNative.ErrorOperationAborted) break;
                     continue;
                 }
@@ -350,126 +286,4 @@ public sealed unsafe class TrafficEngine : IDisposable
         }
         finally { NativeMemory.Free(addrs); }
     }
-
-    // ---- once per second --------------------------------------------------------------
-
-    private void Tick()
-    {
-        try
-        {
-            double seconds = Math.Max(0.001, _tickClock.Elapsed.TotalSeconds);
-            _tickClock.Restart();
-            var now = DateTime.Now;
-            long nowMs = Environment.TickCount64;
-            long tick = ++_tickCount;
-
-            var apps = new List<AppSnapshot>(_appList.Length);
-            double totalDown = 0, totalUp = 0;
-            foreach (var app in _appList)
-            {
-                var (dd, du) = app.Counter.Tick(seconds);
-                Stats.Add(app.Path, dd, du, now);
-
-                foreach (var (key, conn) in app.Connections)
-                {
-                    conn.Tick(seconds);
-                    if (nowMs - conn.LastSeen > ConnectionIdleMs) app.Connections.TryRemove(key, out _);
-                }
-
-                ApplyRule(app, now);
-
-                totalDown += app.Counter.DownRate;
-                totalUp += app.Counter.UpRate;
-                apps.Add(new AppSnapshot(app.Path, app.Name, app.Counter.DownRate, app.Counter.UpRate,
-                    Interlocked.Read(ref app.Counter.Down), Interlocked.Read(ref app.Counter.Up),
-                    app.Connections.Count, app.Blocked, app.QuotaExceeded,
-                    app.DownShaper.Rate, app.UpShaper.Rate));
-            }
-
-            _snapshot = new EngineSnapshot(now, apps, totalDown, totalUp);
-
-            if (tick % 10 == 0) PruneProcesses();
-            if (tick % 30 == 0) Stats.Save();
-
-            Updated?.Invoke(_snapshot);
-        }
-        catch (Exception ex) { DataPaths.LogError("Erreur du minuteur", ex); }
-    }
-
-    private void PruneProcesses()
-    {
-        foreach (int pid in _byPid.Keys)
-        {
-            if (pid <= 4) continue;
-            bool stale = !Win32.IsProcessAlive(pid);
-            if (!stale && _processes.TryGetCached(pid, out var id) && id.Services.Length > 0)
-            {
-                // A svchost process can gain or lose services; re-resolve its identity if so.
-                var now = ServiceCatalog.ForPid(pid).Select(s => s.Name)
-                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase);
-                stale = !now.SequenceEqual(id.Services, StringComparer.OrdinalIgnoreCase);
-            }
-            if (stale)
-            {
-                _byPid.TryRemove(pid, out _);
-                _processes.Invalidate(pid);
-            }
-        }
-    }
-
-    private void ApplyAllRules()
-    {
-        var now = DateTime.Now;
-        foreach (var app in _appList) ApplyRule(app, now);
-    }
-
-    private void ApplyRule(AppTraffic app, DateTime now)
-    {
-        // The app's own rule, one rule per hosted Windows service ("svc:Name"), and for a
-        // service host the rule of its executable (a rule on svchost.exe covers all services).
-        var keys = new List<string>(2 + app.Services.Length) { app.Path };
-        if (app.ExePath != null) keys.Add(app.ExePath);
-        foreach (var svc in app.Services)
-        {
-            string key = ServiceCatalog.KeyPrefix + svc;
-            if (!string.Equals(key, app.Path, StringComparison.OrdinalIgnoreCase)) keys.Add(key);
-        }
-
-        bool blocked = false, quotaExceeded = false;
-        long down = 0, up = 0;
-        foreach (string key in keys)
-        {
-            var rule = Rules.Get(key);
-            if (rule == null) continue;
-            blocked |= rule.Blocked;
-            if (rule.DownLimitEnabled) down = MinLimit(down, rule.DownLimitBytesPerSec);
-            if (rule.UpLimitEnabled) up = MinLimit(up, rule.UpLimitBytesPerSec);
-
-            if (!rule.Quota.Enabled) continue;
-            var usage = Stats.GetPeriodUsage(key, rule.Quota.Period, now);
-            long used = rule.Quota.Direction switch
-            {
-                QuotaDirection.Download => usage.Down,
-                QuotaDirection.Upload => usage.Up,
-                _ => usage.Total,
-            };
-            if (used < rule.Quota.LimitBytes) continue;
-            quotaExceeded = true;
-            if (rule.Quota.Action == QuotaAction.Block) blocked = true;
-            else
-            {
-                long t = Math.Max(1024, rule.Quota.ThrottleBytesPerSec);
-                down = MinLimit(down, t);
-                up = MinLimit(up, t);
-            }
-        }
-
-        app.QuotaExceeded = quotaExceeded;
-        app.Blocked = blocked;
-        app.DownShaper.SetRate(down);
-        app.UpShaper.SetRate(up);
-    }
-
-    /// <summary>Most restrictive of two limits, where 0 means unlimited.</summary>
-    private static long MinLimit(long current, long limit) => current == 0 ? limit : Math.Min(current, limit);
 }

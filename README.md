@@ -80,6 +80,12 @@ Résultat : `installer/Output/WebLimiter-Setup-<version>.exe`, qui installe l'ap
 et le service `WebLimiter`. À chaque release, joindre aussi une copie nommée `WebLimiter-Setup.exe` :
 c'est elle que vise le lien de téléchargement direct (`releases/latest/download/WebLimiter-Setup.exe`).
 
+## Windows ARM64 (mode sans pilote)
+
+WinDivert n'a pas de pilote ARM64 : sur Windows ARM64, WebLimiter utilise `EtwEngine` à la place du moteur WinDivert.
+Mesure par événements ETW (`Microsoft-Windows-Kernel-Network`), blocage par filtres WFP (par exécutable ou par service),
+limite d'envoi par stratégies QoS. **La limite de réception n'est pas applicable** dans ce mode.
+
 ## Limites connues
 
 - **Antivirus avec bouclier web (Avast ici)** : son pilote ré-émet les connexions sous le PID 4 (System) ;
