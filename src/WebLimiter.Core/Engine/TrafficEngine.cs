@@ -98,6 +98,8 @@ public sealed unsafe class TrafficEngine : EngineBase
             app.DownShaper.Clear();
             app.UpShaper.Clear();
         }
+        GlobalDown.Clear();
+        GlobalUp.Clear();
         Win32.timeEndPeriod(1);
         ResetSnapshot();
     }
@@ -211,7 +213,10 @@ public sealed unsafe class TrafficEngine : EngineBase
         if (app.Blocked) return left; // drop
 
         var shaper = outbound ? app.UpShaper : app.DownShaper;
-        if (shaper.Admit(packet, length, addr, app.Counter, connection) == Verdict.Pass)
+        var verdict = shaper.Admit(packet, length, addr, app.Counter, connection);
+        if (verdict == Verdict.Pass)
+            verdict = (outbound ? GlobalUp : GlobalDown).Admit(packet, length, addr, app.Counter, connection);
+        if (verdict == Verdict.Pass)
         {
             fixed (WinDivertAddress* a = &addr)
                 WinDivertNative.WinDivertSend(_net, packet, (uint)length, out _, a);
@@ -231,14 +236,29 @@ public sealed unsafe class TrafficEngine : EngineBase
 
     private void SchedulerLoop()
     {
+        var released = new List<HeldPacket>(512);
         var ready = new List<HeldPacket>(512);
         while (Running)
         {
             foreach (var app in AppList)
             {
-                if (app.DownShaper.HasQueue) app.DownShaper.Release(ready, app.Blocked);
-                if (app.UpShaper.HasQueue) app.UpShaper.Release(ready, app.Blocked);
+                if (app.DownShaper.HasQueue) app.DownShaper.Release(released, app.Blocked);
+                if (app.UpShaper.HasQueue) app.UpShaper.Release(released, app.Blocked);
             }
+            // Packets let through by their app's shaper still have to cross the global one.
+            foreach (var held in released)
+            {
+                var global = held.Address.Outbound ? GlobalUp : GlobalDown;
+                Verdict verdict;
+                fixed (byte* b = held.Buffer)
+                    verdict = global.Admit(b, held.Length, held.Address, held.App, held.Connection);
+                if (verdict == Verdict.Pass) ready.Add(held);
+                else ArrayPool<byte>.Shared.Return(held.Buffer); // held: the global shaper keeps its own copy
+            }
+            released.Clear();
+            if (GlobalDown.HasQueue) GlobalDown.Release(ready, false);
+            if (GlobalUp.HasQueue) GlobalUp.Release(ready, false);
+
             foreach (var held in ready)
             {
                 var addr = held.Address;

@@ -69,6 +69,9 @@ public sealed class AppRowViewModel : ObservableObject
         TodayUp = today?.Up ?? 0;
     }
 
+    /// <summary>For the global rule, which has no traffic row of its own.</summary>
+    public void UpdateQuotaState(bool exceeded) => QuotaExceeded = exceeded;
+
     /// <summary>Re-reads the rule; notifies the view only if it changed, so a box being typed in is not reset.</summary>
     public void SyncRule()
     {

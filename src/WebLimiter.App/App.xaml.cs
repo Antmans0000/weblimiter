@@ -82,9 +82,10 @@ public partial class App : Application
     private async void ScreenshotAndExit(string path)
     {
         await System.Threading.Tasks.Task.Delay(8000);
-        if (path.Contains("stats")) _window!.Tabs.SelectedIndex = 1;
-        else if (path.Contains("excl")) _window!.Tabs.SelectedIndex = 2;
-        else if (path.Contains("settings")) _window!.Tabs.SelectedIndex = 3;
+        if (path.Contains("stats")) _window!.Tabs.SelectedItem = _window.StatsTab;
+        else if (path.Contains("peaks")) _window!.Tabs.SelectedItem = _window.PeaksTab;
+        else if (path.Contains("excl")) _window!.Tabs.SelectedItem = _window.ExclusionsTab;
+        else if (path.Contains("settings")) _window!.Tabs.SelectedItem = _window.SettingsTab;
         else if (_vm!.AppsView.Count > 0) _vm.Selected = (AppRowViewModel)_vm.AppsView.GetItemAt(0);
         await System.Threading.Tasks.Task.Delay(2500);
         var root = (System.Windows.FrameworkElement)_window!.Content;

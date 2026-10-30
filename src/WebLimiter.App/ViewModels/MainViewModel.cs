@@ -8,6 +8,7 @@ using System.Windows.Input;
 using WebLimiter.App.Util;
 using WebLimiter.Core.Backend;
 using WebLimiter.Core.Engine;
+using WebLimiter.Core.Model;
 using WebLimiter.Core.Storage;
 
 namespace WebLimiter.App.ViewModels;
@@ -24,6 +25,7 @@ public sealed class MainViewModel : ObservableObject
         Rules = new RuleBook(backend);
         Stats = new StatsViewModel(backend);
         Exclusions = new ExclusionsViewModel(backend, Rules);
+        Global = new AppRowViewModel(AppRule.GlobalKey, "Total", Rules);
 
         var view = (ListCollectionView)CollectionViewSource.GetDefaultView(Apps);
         view.Filter = o => Filter((AppRowViewModel)o);
@@ -41,8 +43,10 @@ public sealed class MainViewModel : ObservableObject
 
         Rules.Changed += () =>
         {
-            foreach (var rule in Rules.All) RowFor(rule.AppPath, AppNames.Display(rule.AppPath));
+            foreach (var rule in Rules.All.Where(r => r.AppPath != AppRule.GlobalKey))
+                RowFor(rule.AppPath, AppNames.Display(rule.AppPath));
             foreach (var row in Apps) row.SyncRule();
+            Global.SyncRule();
         };
         Rules.Reload();
 
@@ -54,6 +58,8 @@ public sealed class MainViewModel : ObservableObject
     public StatsViewModel Stats { get; }
     public ExclusionsViewModel Exclusions { get; }
     public SettingsViewModel Settings { get; }
+    /// <summary>Limits and quota of all traffic together, edited on the Total line.</summary>
+    public AppRowViewModel Global { get; }
     public ObservableCollection<AppRowViewModel> Apps { get; } = new();
     public ListCollectionView AppsView { get; }
     public ObservableCollection<ConnectionRow> Connections { get; } = new();
@@ -104,6 +110,10 @@ public sealed class MainViewModel : ObservableObject
     public string TotalTodayDownText { get => _totalTodayDownText; private set => Set(ref _totalTodayDownText, value); }
     public string TotalTodayUpText { get => _totalTodayUpText; private set => Set(ref _totalTodayUpText, value); }
     public string TotalConnections { get => _totalConnections; private set => Set(ref _totalConnections, value); }
+
+    public string VersionText => $"WebLimiter {Updater.CurrentVersion.ToString(3)} — " +
+        (System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64
+            ? "moteur ETW" : "moteur WinDivert");
 
     private BackendStatus _backendStatus = new(false, false, null, false);
     public bool IsRunning => _backendStatus.IsRunning;
@@ -158,9 +168,10 @@ public sealed class MainViewModel : ObservableObject
         foreach (var row in Apps)
             row.Update(byPath.GetValueOrDefault(row.Path), today.GetValueOrDefault(row.Path));
 
+        Global.UpdateQuotaState(snap.GlobalQuotaExceeded);
         TotalHistory.Push(snap.TotalDownRate, snap.TotalUpRate);
-        TotalDownText = Format.Rate(snap.TotalDownRate) is { Length: > 0 } d ? d : "0 o/s";
-        TotalUpText = Format.Rate(snap.TotalUpRate) is { Length: > 0 } u ? u : "0 o/s";
+        TotalDownText = Format.Rate(snap.TotalDownRate);
+        TotalUpText = Format.Rate(snap.TotalUpRate);
         long todayDown = today.Values.Sum(u => u.Down), todayUp = today.Values.Sum(u => u.Up);
         TotalTodayDownText = todayDown > 0 ? Format.Bytes(todayDown) : "";
         TotalTodayUpText = todayUp > 0 ? Format.Bytes(todayUp) : "";

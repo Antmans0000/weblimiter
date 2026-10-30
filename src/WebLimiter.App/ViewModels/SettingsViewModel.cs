@@ -20,11 +20,15 @@ public sealed class SettingsViewModel : ObservableObject
         InstallServiceCommand = new RelayCommand(_ => Run(InstallService), _ => !_busy);
         UninstallServiceCommand = new RelayCommand(_ => Run(UninstallService), _ => !_busy);
         StartServiceCommand = new RelayCommand(_ => Run(StartService), _ => !_busy);
+        UpdateCommand = new RelayCommand(_ => Run(Update, update: true), _ => !_busy);
     }
 
     public ICommand InstallServiceCommand { get; }
     public ICommand UninstallServiceCommand { get; }
     public ICommand StartServiceCommand { get; }
+    public ICommand UpdateCommand { get; }
+
+    public string VersionText => "Version installée : " + Updater.CurrentVersion.ToString(3);
 
     public string DataFolder => DataPaths.Root;
 
@@ -36,6 +40,10 @@ public sealed class SettingsViewModel : ObservableObject
     public bool ServiceRunning { get => _running; private set => Set(ref _running, value); }
     public bool ServiceStopped => _installed && !_running;
     public string? Message { get => _message; private set => Set(ref _message, value); }
+
+    private string? _updateMessage;
+    /// <summary>Result of the last update check, shown in the Updates card.</summary>
+    public string? UpdateMessage { get => _updateMessage; private set => Set(ref _updateMessage, value); }
     public bool IsError { get => _isError; private set => Set(ref _isError, value); }
 
     public bool IsServiceMode => _backend.Current is PipeBackend;
@@ -61,19 +69,25 @@ public sealed class SettingsViewModel : ObservableObject
         Raise(nameof(ServiceStateText));
     }
 
-    private async void Run(Func<string> action)
+    private async void Run(Func<string> action, bool update = false)
     {
+        void Show(string? text)
+        {
+            if (update) UpdateMessage = text;
+            else Message = text;
+        }
+
         Busy = true;
-        Message = "Opération en cours…";
+        Show(update ? "Recherche de la dernière version…" : "Opération en cours…");
         IsError = false;
         try
         {
-            Message = await Task.Run(action);
+            Show(await Task.Run(action));
         }
         catch (Exception ex)
         {
-            DataPaths.LogError("Gestion du service", ex);
-            Message = ex.Message;
+            DataPaths.LogError(update ? "Mise à jour" : "Gestion du service", ex);
+            Show(update ? "Mise à jour impossible : " + ex.Message : ex.Message);
             IsError = true;
         }
         finally
@@ -113,6 +127,17 @@ public sealed class SettingsViewModel : ObservableObject
         ServiceInstaller.Uninstall();
         FallBackToLocal();
         return "Service désinstallé : le moteur tourne de nouveau dans l'application.";
+    }
+
+    /// <summary>Downloads the setup of the latest GitHub release if it is newer, and launches it.</summary>
+    private string Update()
+    {
+        var release = Updater.GetLatest();
+        if (release.Version <= Updater.CurrentVersion)
+            return $"WebLimiter est à jour (dernière version publiée : {release.Version.ToString(3)}).";
+        string setup = Updater.Download(release);
+        Updater.Launch(setup);
+        return $"Installation de la version {release.Version.ToString(3)} lancée : WebLimiter va se fermer.";
     }
 
     private void ConnectToService()

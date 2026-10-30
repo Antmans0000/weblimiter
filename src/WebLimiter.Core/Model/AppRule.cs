@@ -26,6 +26,9 @@ public sealed class QuotaRule
 /// <summary>User rule for one application, identified by its executable path.</summary>
 public sealed class AppRule
 {
+    /// <summary>Key of the global rule: its limits and quota apply to the traffic of all applications together.</summary>
+    public const string GlobalKey = "*";
+
     public string AppPath { get; set; } = "";
     public bool Blocked { get; set; }
     public bool DownLimitEnabled { get; set; }

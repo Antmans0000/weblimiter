@@ -56,6 +56,9 @@ public sealed class PipeBackend : IBackend
     public IReadOnlyList<AppUsage> GetUsageByApp(DateTime? from, DateTime to) =>
         Call<List<AppUsage>>(new PipeRequest { Op = "Usage", From = from, To = to }) ?? new();
 
+    public AppUsage GetTotalUsage(DateTime? from, DateTime to) =>
+        Call<AppUsage>(new PipeRequest { Op = "TotalUsage", From = from, To = to }) ?? new AppUsage(AppRule.GlobalKey, 0, 0);
+
     public IReadOnlyList<DayUsage> GetDaily(DateTime from, DateTime to) =>
         Call<List<DayUsage>>(new PipeRequest { Op = "Daily", From = from, To = to }) ?? new();
 
@@ -149,6 +152,7 @@ public sealed class SwitchableBackend : IBackend
     public IReadOnlyList<AppRule> GetRules() => _current.GetRules();
     public void SetRule(AppRule rule) => _current.SetRule(rule);
     public IReadOnlyList<AppUsage> GetUsageByApp(DateTime? from, DateTime to) => _current.GetUsageByApp(from, to);
+    public AppUsage GetTotalUsage(DateTime? from, DateTime to) => _current.GetTotalUsage(from, to);
     public IReadOnlyList<DayUsage> GetDaily(DateTime from, DateTime to) => _current.GetDaily(from, to);
     public void ClearStats() => _current.ClearStats();
     public void SetFiltering(bool enabled) => _current.SetFiltering(enabled);

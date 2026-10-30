@@ -18,6 +18,11 @@ public abstract class EngineBase : IDisposable
     internal readonly ConcurrentDictionary<string, AppTraffic> Apps = new(StringComparer.OrdinalIgnoreCase);
     internal readonly ConcurrentDictionary<int, AppTraffic> ByPid = new();
     internal AppTraffic[] AppList = Array.Empty<AppTraffic>();
+    /// <summary>Shapers of the global rule, crossed by every packet after the app's own shaper.</summary>
+    internal readonly Shaper GlobalDown = new();
+    internal readonly Shaper GlobalUp = new();
+    private volatile bool _globalBlocked;
+    private volatile bool _globalQuotaExceeded;
 
     private Timer? _timer;
     private readonly Stopwatch _tickClock = new();
@@ -119,13 +124,14 @@ public abstract class EngineBase : IDisposable
             var now = DateTime.Now;
             long nowMs = Environment.TickCount64;
             long tick = ++_tickCount;
+            ApplyGlobalRule(now);
 
             var apps = new List<AppSnapshot>(AppList.Length);
             double totalDown = 0, totalUp = 0;
             foreach (var app in AppList)
             {
                 var (dd, du) = app.Counter.Tick(seconds);
-                Stats.Add(app.Path, dd, du, now);
+                Stats.Add(app.Path, dd, du, app.Counter.DownRate, app.Counter.UpRate, now);
 
                 foreach (var (key, conn) in app.Connections)
                 {
@@ -143,7 +149,8 @@ public abstract class EngineBase : IDisposable
                     app.DownShaper.Rate, app.UpShaper.Rate));
             }
 
-            _snapshot = new EngineSnapshot(now, apps, totalDown, totalUp);
+            Stats.Add(AppRule.GlobalKey, 0, 0, totalDown, totalUp, now);
+            _snapshot = new EngineSnapshot(now, apps, totalDown, totalUp, _globalQuotaExceeded);
 
             if (tick % 10 == 0) PruneProcesses();
             if (tick % 30 == 0) Stats.Save();
@@ -177,6 +184,7 @@ public abstract class EngineBase : IDisposable
     private void ApplyAllRules()
     {
         var now = DateTime.Now;
+        ApplyGlobalRule(now);
         foreach (var app in AppList) ApplyRule(app, now);
     }
 
@@ -201,31 +209,59 @@ public abstract class EngineBase : IDisposable
             blocked |= rule.Blocked;
             if (rule.DownLimitEnabled) down = MinLimit(down, rule.DownLimitBytesPerSec);
             if (rule.UpLimitEnabled) up = MinLimit(up, rule.UpLimitBytesPerSec);
-
-            if (!rule.Quota.Enabled) continue;
-            var usage = Stats.GetPeriodUsage(key, rule.Quota.Period, now);
-            long used = rule.Quota.Direction switch
-            {
-                QuotaDirection.Download => usage.Down,
-                QuotaDirection.Upload => usage.Up,
-                _ => usage.Total,
-            };
-            if (used < rule.Quota.LimitBytes) continue;
-            quotaExceeded = true;
-            if (rule.Quota.Action == QuotaAction.Block) blocked = true;
-            else
-            {
-                long t = Math.Max(1024, rule.Quota.ThrottleBytesPerSec);
-                down = MinLimit(down, t);
-                up = MinLimit(up, t);
-            }
+            if (rule.Quota.Enabled)
+                quotaExceeded |= ApplyQuota(rule.Quota, Stats.GetPeriodUsage(key, rule.Quota.Period, now),
+                    ref blocked, ref down, ref up);
         }
 
         app.QuotaExceeded = quotaExceeded;
-        app.Blocked = blocked;
+        app.Blocked = blocked || _globalBlocked;
         app.DownShaper.SetRate(down);
         app.UpShaper.SetRate(up);
         OnRuleApplied(app);
+    }
+
+    /// <summary>
+    /// The global rule limits the sum of all traffic (shared shapers) and its quota counts every app;
+    /// once reached it blocks or throttles all traffic together.
+    /// </summary>
+    private void ApplyGlobalRule(DateTime now)
+    {
+        var rule = Rules.Get(AppRule.GlobalKey);
+        bool blocked = false, exceeded = false;
+        long down = 0, up = 0;
+        if (rule != null)
+        {
+            if (rule.DownLimitEnabled) down = rule.DownLimitBytesPerSec;
+            if (rule.UpLimitEnabled) up = rule.UpLimitBytesPerSec;
+            if (rule.Quota.Enabled)
+                exceeded = ApplyQuota(rule.Quota, Stats.GetPeriodUsage(null, rule.Quota.Period, now),
+                    ref blocked, ref down, ref up);
+        }
+        _globalBlocked = blocked;
+        _globalQuotaExceeded = exceeded;
+        GlobalDown.SetRate(down);
+        GlobalUp.SetRate(up);
+    }
+
+    /// <summary>Applies the quota's action if <paramref name="usage"/> reached it; returns true if so.</summary>
+    private static bool ApplyQuota(QuotaRule quota, Usage usage, ref bool blocked, ref long down, ref long up)
+    {
+        long used = quota.Direction switch
+        {
+            QuotaDirection.Download => usage.Down,
+            QuotaDirection.Upload => usage.Up,
+            _ => usage.Total,
+        };
+        if (used < quota.LimitBytes) return false;
+        if (quota.Action == QuotaAction.Block) blocked = true;
+        else
+        {
+            long t = Math.Max(1024, quota.ThrottleBytesPerSec);
+            down = MinLimit(down, t);
+            up = MinLimit(up, t);
+        }
+        return true;
     }
 
     /// <summary>Most restrictive of two limits, where 0 means unlimited.</summary>

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using WebLimiter.Core.Model;
 
 namespace WebLimiter.Core.Engine;
 
@@ -9,6 +10,7 @@ public static class AppNames
 
     public static string Display(string appPath) => Cache.GetOrAdd(appPath, path => path switch
     {
+        AppRule.GlobalKey => "Total",
         ProcessResolver.SystemPath => "Système",
         ProcessResolver.UnknownPath => "Inconnu",
         _ when IsService(path) => "Service : " + string.Join(", ",
@@ -26,6 +28,6 @@ public static class AppNames
 
     /// <summary>True for real executables (not services or pseudo-apps).</summary>
     public static bool IsExecutable(string appPath) =>
-        !IsService(appPath) && appPath is not (ProcessResolver.SystemPath or ProcessResolver.UnknownPath)
+        !IsService(appPath) && appPath is not (ProcessResolver.SystemPath or ProcessResolver.UnknownPath or AppRule.GlobalKey)
         && !appPath.StartsWith('[');
 }

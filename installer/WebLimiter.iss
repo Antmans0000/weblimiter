@@ -3,7 +3,7 @@
 ; see installer\build.ps1). Produces installer\Output\WebLimiter-Setup-<version>.exe.
 
 #define AppName "WebLimiter"
-#define AppVersion "0.2.1"
+#define AppVersion "0.3.0"
 #define AppExe "WebLimiter.exe"
 #define ServiceName "WebLimiter"
 #define PublishDir "..\publish\app"

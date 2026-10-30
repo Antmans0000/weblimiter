@@ -13,16 +13,24 @@ Le setup n'est pas signé : Windows SmartScreen peut afficher un avertissement
 
 - **Activité** : liste des applications avec débits ↓/↑ en temps réel, consommation du jour, nombre de connexions,
   détail des connexions (adresse, hôte via DNS inverse, ports, débits), graphe des 2 dernières minutes.
+  Un débit nul s'affiche « - ». Quatre dispositions au choix (mémorisé) : Standard (détails en dessous),
+  Côte à côte (détails à droite), Liste seule, Compact (colonnes de trafic seulement).
 - **Limiteur** : limite en Ko/s par application, séparément en réception et en envoi.
+- **Règle globale** (ligne Total de l'onglet Activité) : limite de débit ↓/↑ et quota appliqués à toutes les
+  applications ensemble, en plus de leurs règles propres.
 - **Blocage** : coupe tout le trafic d'une application.
 - **Quotas** : volume par jour ou par mois (total, reçu ou envoyé) ; une fois atteint, blocage ou ralentissement
   jusqu'à la période suivante.
 - **Statistiques** : historique journalier par application (aujourd'hui, hier, 7 jours, mois, 12 mois).
+- **Débits max** : débit le plus élevé sur une seconde, en réception et en envoi, par application et pour le total,
+  sur les mêmes périodes.
 - **Exclusions** : blocage direct des mises à jour Windows (Windows Update, BITS, Optimisation de livraison,
   Orchestrateur, Medic), liste de tous les services et des applications de la machine avec un interrupteur de blocage,
   ajout manuel d'un programme.
 - **Service Windows** (onglet Paramètres) : le moteur peut tourner dans le service `WebLimiter` (compte Système,
   démarrage automatique) pour que le filtrage continue interface fermée.
+- **Mise à jour** (onglet Paramètres) : télécharge et lance l'installateur de la dernière release GitHub si elle est
+  plus récente.
 - Zone de notification, démarrage avec Windows (tâche planifiée avec privilèges élevés), instance unique.
 
 ## Architecture
@@ -84,7 +92,8 @@ c'est elle que vise le lien de téléchargement direct (`releases/latest/downloa
 
 WinDivert n'a pas de pilote ARM64 : sur Windows ARM64, WebLimiter utilise `EtwEngine` à la place du moteur WinDivert.
 Mesure par événements ETW (`Microsoft-Windows-Kernel-Network`), blocage par filtres WFP (par exécutable ou par service),
-limite d'envoi par stratégies QoS. **La limite de réception n'est pas applicable** dans ce mode.
+limite d'envoi par stratégies QoS. **La limite de réception n'est pas applicable** dans ce mode, ni les limites
+de débit globales (le quota global, lui, fonctionne).
 
 ## Limites connues
 
@@ -97,7 +106,7 @@ limite d'envoi par stratégies QoS. **La limite de réception n'est pas applicab
 
 ## Pistes pour la suite
 
-- Limites globales et priorités entre applications.
+- Priorités entre applications.
 - Mode pare-feu interactif (demander à l'utilisateur à la première connexion d'une application).
 - Règles par connexion / par adresse distante.
 - Installateur (MSI/Inno Setup) et signature de code.

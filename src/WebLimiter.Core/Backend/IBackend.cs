@@ -20,6 +20,8 @@ public interface IBackend : IDisposable
     void SetRule(AppRule rule);
     /// <summary>Usage per app over a date range; from == null means since the beginning.</summary>
     IReadOnlyList<AppUsage> GetUsageByApp(DateTime? from, DateTime to);
+    /// <summary>All traffic over a date range, with the highest total rates.</summary>
+    AppUsage GetTotalUsage(DateTime? from, DateTime to);
     IReadOnlyList<DayUsage> GetDaily(DateTime from, DateTime to);
     void ClearStats();
     void SetFiltering(bool enabled);
@@ -51,6 +53,7 @@ public sealed class LocalBackend : IBackend
     public IReadOnlyList<AppRule> GetRules() => _engine.Rules.All();
     public void SetRule(AppRule rule) => _engine.Rules.Set(rule);
     public IReadOnlyList<AppUsage> GetUsageByApp(DateTime? from, DateTime to) => _engine.Stats.GetAllApps(from, to);
+    public AppUsage GetTotalUsage(DateTime? from, DateTime to) => _engine.Stats.GetTotal(from, to);
     public IReadOnlyList<DayUsage> GetDaily(DateTime from, DateTime to) => _engine.Stats.GetDaily(from, to);
     public void ClearStats() => _engine.Stats.Clear();
 

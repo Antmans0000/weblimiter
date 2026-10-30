@@ -7,17 +7,24 @@ public sealed class Usage
 {
     public long Down { get; set; }
     public long Up { get; set; }
+    /// <summary>Highest per-second rates seen that day (bytes/s).</summary>
+    public long PeakDown { get; set; }
+    public long PeakUp { get; set; }
     public long Total => Down + Up;
 }
 
-public sealed record AppUsage(string AppPath, long Down, long Up)
+/// <summary>Volume and highest rates (bytes/s) of one app over a period.</summary>
+public sealed record AppUsage(string AppPath, long Down, long Up, long PeakDown = 0, long PeakUp = 0)
 {
     public long Total => Down + Up;
 }
 
 public sealed record DayUsage(DateTime Day, long Down, long Up);
 
-/// <summary>Daily per-application traffic totals, persisted to JSON.</summary>
+/// <summary>
+/// Daily per-application traffic totals and peak rates, persisted to JSON. The entry keyed
+/// <see cref="AppRule.GlobalKey"/> only holds the peak rates of all traffic together.
+/// </summary>
 public sealed class StatsStore
 {
     private readonly object _lock = new();
@@ -45,9 +52,9 @@ public sealed class StatsStore
 
     private static string DayKey(DateTime d) => d.ToString("yyyy-MM-dd");
 
-    public void Add(string appPath, long down, long up, DateTime when)
+    public void Add(string appPath, long down, long up, double downRate, double upRate, DateTime when)
     {
-        if (down == 0 && up == 0) return;
+        if (down == 0 && up == 0 && downRate < 1 && upRate < 1) return;
         lock (_lock)
         {
             string key = DayKey(when);
@@ -56,20 +63,27 @@ public sealed class StatsStore
             if (!apps.TryGetValue(appPath, out var u)) apps[appPath] = u = new Usage();
             u.Down += down;
             u.Up += up;
+            u.PeakDown = Math.Max(u.PeakDown, (long)downRate);
+            u.PeakUp = Math.Max(u.PeakUp, (long)upRate);
             _dirty = true;
         }
     }
 
-    /// <summary>Usage of one app between two dates (inclusive, day granularity).</summary>
-    public Usage GetUsage(string appPath, DateTime from, DateTime to)
+    private static bool IsGlobal(string key) => key == AppRule.GlobalKey;
+
+    /// <summary>Usage of one app, or of all apps when appPath is null, between two dates (inclusive).</summary>
+    public Usage GetUsage(string? appPath, DateTime from, DateTime to)
     {
         var total = new Usage();
         lock (_lock)
         {
             for (var d = from.Date; d <= to.Date; d = d.AddDays(1))
             {
-                if (_days.TryGetValue(DayKey(d), out var apps) && apps.TryGetValue(appPath, out var u))
+                if (!_days.TryGetValue(DayKey(d), out var apps)) continue;
+                foreach (var (path, u) in apps)
                 {
+                    if (IsGlobal(path)) continue;
+                    if (appPath != null && !string.Equals(path, appPath, StringComparison.OrdinalIgnoreCase)) continue;
                     total.Down += u.Down;
                     total.Up += u.Up;
                 }
@@ -78,7 +92,7 @@ public sealed class StatsStore
         return total;
     }
 
-    public Usage GetPeriodUsage(string appPath, QuotaPeriod period, DateTime now) =>
+    public Usage GetPeriodUsage(string? appPath, QuotaPeriod period, DateTime now) =>
         period == QuotaPeriod.Day
             ? GetUsage(appPath, now, now)
             : GetUsage(appPath, new DateTime(now.Year, now.Month, 1), now);
@@ -99,11 +113,41 @@ public sealed class StatsStore
                     if (!agg.TryGetValue(path, out var a)) agg[path] = a = new Usage();
                     a.Down += u.Down;
                     a.Up += u.Up;
+                    a.PeakDown = Math.Max(a.PeakDown, u.PeakDown);
+                    a.PeakUp = Math.Max(a.PeakUp, u.PeakUp);
                 }
             }
         }
-        return agg.Select(kv => new AppUsage(kv.Key, kv.Value.Down, kv.Value.Up))
+        return agg.Where(kv => !IsGlobal(kv.Key))
+                  .Select(kv => new AppUsage(kv.Key, kv.Value.Down, kv.Value.Up, kv.Value.PeakDown, kv.Value.PeakUp))
                   .OrderByDescending(a => a.Total).ToList();
+    }
+
+    /// <summary>All traffic over a date range: summed volumes and the highest total rates.</summary>
+    public AppUsage GetTotal(DateTime? from, DateTime to)
+    {
+        long down = 0, up = 0, peakDown = 0, peakUp = 0;
+        lock (_lock)
+        {
+            string fromKey = from.HasValue ? DayKey(from.Value) : "";
+            string toKey = DayKey(to);
+            foreach (var (day, apps) in _days)
+            {
+                if (string.CompareOrdinal(day, fromKey) < 0 || string.CompareOrdinal(day, toKey) > 0) continue;
+                foreach (var (path, u) in apps)
+                {
+                    if (IsGlobal(path))
+                    {
+                        peakDown = Math.Max(peakDown, u.PeakDown);
+                        peakUp = Math.Max(peakUp, u.PeakUp);
+                        continue;
+                    }
+                    down += u.Down;
+                    up += u.Up;
+                }
+            }
+        }
+        return new AppUsage(AppRule.GlobalKey, down, up, peakDown, peakUp);
     }
 
     /// <summary>Per-day totals (all apps or one app) for the given range, oldest first.</summary>
@@ -119,6 +163,7 @@ public sealed class StatsStore
                 {
                     foreach (var (path, u) in apps)
                     {
+                        if (IsGlobal(path)) continue;
                         if (appPath != null && !string.Equals(path, appPath, StringComparison.OrdinalIgnoreCase)) continue;
                         down += u.Down;
                         up += u.Up;

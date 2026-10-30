@@ -14,7 +14,7 @@ public static class Format
         return (bytes / 1024 / 1024 / 1024).ToString("0.00", Fr) + " Go";
     }
 
-    public static string Rate(double bytesPerSec) => bytesPerSec < 1 ? "" : Bytes(bytesPerSec) + "/s";
+    public static string Rate(double bytesPerSec) => bytesPerSec < 1 ? "-" : Bytes(bytesPerSec) + "/s";
 
     public static string Kb(long bytesPerSec) => (bytesPerSec / 1024).ToString(Fr) + " Ko/s";
 }

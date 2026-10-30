@@ -94,6 +94,7 @@ public sealed class PipeServer : IDisposable
                 "Rules" => _backend.GetRules(),
                 "SetRule" => Do(() => _backend.SetRule(req.Rule ?? throw new InvalidDataException("Règle manquante"))),
                 "Usage" => _backend.GetUsageByApp(req.From, req.To),
+                "TotalUsage" => _backend.GetTotalUsage(req.From, req.To),
                 "Daily" => _backend.GetDaily(req.From ?? req.To, req.To),
                 "ClearStats" => Do(_backend.ClearStats),
                 "SetFiltering" => Do(() => _backend.SetFiltering(req.Enabled)),

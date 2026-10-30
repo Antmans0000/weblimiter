@@ -9,7 +9,8 @@ namespace WebLimiter.Core.Engine;
 /// <summary>
 /// Driverless engine for machines where WinDivert cannot load (Windows on ARM64): traffic is measured
 /// from ETW kernel network events, blocking uses WFP filters and upload limits use QoS policies.
-/// Download limits cannot be enforced.
+/// Download limits and the global rate limits cannot be enforced; the global quota can (it blocks or
+/// throttles each app).
 /// </summary>
 public sealed unsafe class EtwEngine : EngineBase
 {
