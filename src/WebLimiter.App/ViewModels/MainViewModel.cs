@@ -111,9 +111,27 @@ public sealed class MainViewModel : ObservableObject
     public string TotalTodayUpText { get => _totalTodayUpText; private set => Set(ref _totalTodayUpText, value); }
     public string TotalConnections { get => _totalConnections; private set => Set(ref _totalConnections, value); }
 
-    public string VersionText => $"WebLimiter {Updater.CurrentVersion.ToString(3)} — " +
-        (System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64
-            ? "moteur ETW" : "moteur WinDivert");
+    public static bool IsArm64 =>
+        System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64;
+
+    /// <summary>The driverless ARM64 engine cannot delay incoming packets, so download limits do not exist there.</summary>
+    public static bool CanLimitDownload => !IsArm64;
+
+    public string VersionText => $"WebLimiter {Updater.CurrentVersion.ToString(3)} — " + (IsArm64 ? "moteur ETW" : "moteur WinDivert");
+
+    public string LimitsHint => CanLimitDownload
+        ? "Ko/s — Entrée pour valider"
+        : "Ko/s — Entrée pour valider — réception non limitable sur ARM64 ⓘ";
+
+    public string? LimitsHintDetail => CanLimitDownload ? null :
+        "Sur Windows ARM64, le pilote WinDivert ne peut pas être chargé : WebLimiter utilise le pare-feu (WFP) et les stratégies QoS de Windows.\n" +
+        "Le blocage, les quotas et les limites d'envoi fonctionnent ; Windows ne permet pas de ralentir la réception sans pilote.\n" +
+        "La limite d'envoi globale ne s'ajoute pas à celle d'une application qui a sa propre limite d'envoi.";
+
+    private bool _isGlobalBlocked;
+    public bool IsGlobalBlocked { get => _isGlobalBlocked; private set => Set(ref _isGlobalBlocked, value); }
+
+    public void ToggleGlobalBlock() => Global.Blocked = !Global.Blocked;
 
     private BackendStatus _backendStatus = new(false, false, null, false);
     public bool IsRunning => _backendStatus.IsRunning;
@@ -169,6 +187,7 @@ public sealed class MainViewModel : ObservableObject
             row.Update(byPath.GetValueOrDefault(row.Path), today.GetValueOrDefault(row.Path));
 
         Global.UpdateQuotaState(snap.GlobalQuotaExceeded);
+        IsGlobalBlocked = snap.GlobalBlocked;
         TotalHistory.Push(snap.TotalDownRate, snap.TotalUpRate);
         TotalDownText = Format.Rate(snap.TotalDownRate);
         TotalUpText = Format.Rate(snap.TotalUpRate);
@@ -177,7 +196,10 @@ public sealed class MainViewModel : ObservableObject
         TotalTodayUpText = todayUp > 0 ? Format.Bytes(todayUp) : "";
         TotalConnections = snap.Apps.Sum(a => a.Connections).ToString();
         string where = _backendStatus.IsService ? "service Windows" : "moteur intégré";
-        Status = IsRunning
+        Status = IsRunning && snap.GlobalBlocked
+            ? (Global.Blocked ? "Internet bloqué — toutes les applications sont coupées (sauf le trafic local)"
+                              : "Quota global atteint — Internet bloqué jusqu'à la prochaine période")
+            : IsRunning
             ? $"Filtrage actif ({where}) — {snap.Apps.Count(a => a.Connections > 0)} applications connectées"
             : EngineError ?? $"Filtrage suspendu ({where}) — le trafic n'est ni mesuré ni limité";
         Raise(nameof(IsRunning));

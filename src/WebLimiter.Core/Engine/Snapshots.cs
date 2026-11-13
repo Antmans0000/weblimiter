@@ -28,7 +28,8 @@ public sealed record EngineSnapshot(
     IReadOnlyList<AppSnapshot> Apps,
     double TotalDownRate,
     double TotalUpRate,
-    bool GlobalQuotaExceeded = false)
+    bool GlobalQuotaExceeded = false,
+    bool GlobalBlocked = false)
 {
     public static readonly EngineSnapshot Empty = new(DateTime.Now, Array.Empty<AppSnapshot>(), 0, 0);
 }

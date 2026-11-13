@@ -110,7 +110,17 @@ public partial class MainWindow : Window
         foreach (UIElement child in TotalHeader.Children)
             if (RuleColumns.Contains(Grid.GetColumn(child)))
                 child.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+
+        if (!MainViewModel.CanLimitDownload)
+        {
+            AppsGrid.Columns[DownLimitColumn].Visibility = Visibility.Collapsed;
+            header[DownLimitColumn].Width = new GridLength(0);
+            foreach (UIElement child in TotalHeader.Children)
+                if (Grid.GetColumn(child) == DownLimitColumn) child.Visibility = Visibility.Collapsed;
+        }
     }
+
+    private const int DownLimitColumn = 3;
 
     private void LimitBox_KeyDown(object sender, KeyEventArgs e)
     {
@@ -131,7 +141,7 @@ public partial class MainWindow : Window
     {
         bool wanted = AutoStartBox.IsChecked == true;
         if (!AutoStart.Set(wanted))
-            MessageBox.Show(this, "Impossible de modifier le dÃ©marrage automatique (tÃ¢che planifiÃ©e).", "WebLimiter",
+            MessageBox.Show(this, "Impossible de modifier le démarrage automatique (tâche planifiée).", "WebLimiter",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         AutoStartBox.IsChecked = AutoStart.IsEnabled();
     }
@@ -150,7 +160,7 @@ public partial class MainWindow : Window
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "Programme Ã  bloquer",
+            Title = "Programme à bloquer",
             Filter = "Programmes (*.exe)|*.exe",
         };
         if (dialog.ShowDialog(this) == true) _vm.Exclusions.AddProgram(dialog.FileName);
@@ -164,12 +174,12 @@ public partial class MainWindow : Window
     private void ClearStats_Click(object sender, RoutedEventArgs e)
     {
         var answer = MessageBox.Show(this,
-            "Effacer tout l'historique de consommation ? Les quotas repartiront de zÃ©ro.\nCette action est dÃ©finitive.",
+            "Effacer tout l'historique de consommation ? Les quotas repartiront de zéro.\nCette action est définitive.",
             "Effacer l'historique", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         if (answer == MessageBoxResult.Yes) _vm.Stats.Clear();
     }
 
-    /// <summary>Numeric columns sort largest first on the first click; the name column starts Aâ†’Z.</summary>
+    /// <summary>Numeric columns sort largest first on the first click; the name column starts A→Z.</summary>
     private void OnSorting(object sender, DataGridSortingEventArgs e)
     {
         e.Handled = true;

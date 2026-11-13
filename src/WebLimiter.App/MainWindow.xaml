@@ -111,7 +111,7 @@
                                          Tag="Compact" Checked="Layout_Checked" ToolTip="Débits et consommation seulement, sans les colonnes de règles" />
                         </StackPanel>
                         <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,16,0"
-                                   Text="Ko/s — Entrée pour valider" />
+                                   Text="{Binding LimitsHint}" ToolTip="{Binding LimitsHintDetail}" />
                     </DockPanel>
 
                     <Grid Grid.Row="1" x:Name="ListArea">
@@ -147,6 +147,9 @@
                                     <CheckBox IsChecked="{Binding UpLimitEnabled, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0" />
                                     <TextBox Style="{StaticResource LimitBox}" Text="{Binding UpLimitKb}" IsEnabled="{Binding UpLimitEnabled}" />
                                 </StackPanel>
+                                <CheckBox Grid.Column="5" DataContext="{Binding Global}" Style="{StaticResource BlockSwitch}"
+                                          IsChecked="{Binding Blocked, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="Couper tout Internet (sauf le trafic local)" />
                                 <Button Grid.Column="6" DataContext="{Binding Global}" Click="EditQuota_Click" HorizontalAlignment="Left"
                                         ToolTip="Quota global : volume de toutes les applications ensemble">
                                     <Button.Style>
@@ -847,7 +850,18 @@
                     </Ellipse.Style>
                 </Ellipse>
                 <TextBlock DockPanel.Dock="Right" Text="{Binding VersionText, Mode=OneTime}" Foreground="{StaticResource Muted}" FontSize="12" />
-                <TextBlock Text="{Binding Status}" Foreground="{StaticResource Muted}" FontSize="12" />
+                <TextBlock Text="{Binding Status}" FontSize="12">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsGlobalBlocked}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Danger}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </DockPanel>
         </Border>
     </Grid>

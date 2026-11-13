@@ -24,6 +24,9 @@ public abstract class EngineBase : IDisposable
     private volatile bool _globalBlocked;
     private volatile bool _globalQuotaExceeded;
 
+    /// <summary>All traffic is cut: global switch on, or global quota reached with the block action.</summary>
+    protected bool GlobalBlocked => _globalBlocked;
+
     private Timer? _timer;
     private readonly Stopwatch _tickClock = new();
     private long _tickCount;
@@ -150,7 +153,7 @@ public abstract class EngineBase : IDisposable
             }
 
             Stats.Add(AppRule.GlobalKey, 0, 0, totalDown, totalUp, now);
-            _snapshot = new EngineSnapshot(now, apps, totalDown, totalUp, _globalQuotaExceeded);
+            _snapshot = new EngineSnapshot(now, apps, totalDown, totalUp, _globalQuotaExceeded, _globalBlocked);
 
             if (tick % 10 == 0) PruneProcesses();
             if (tick % 30 == 0) Stats.Save();
@@ -232,6 +235,7 @@ public abstract class EngineBase : IDisposable
         long down = 0, up = 0;
         if (rule != null)
         {
+            blocked = rule.Blocked;
             if (rule.DownLimitEnabled) down = rule.DownLimitBytesPerSec;
             if (rule.UpLimitEnabled) up = rule.UpLimitBytesPerSec;
             if (rule.Quota.Enabled)

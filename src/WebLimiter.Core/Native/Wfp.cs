@@ -22,6 +22,9 @@ internal sealed unsafe class WfpSession : IDisposable
     private static readonly Guid ConditionAppId = new("d78e1e87-8644-4ea5-9437-d809ecefc971");
     private static readonly Guid ConditionRemoteAddress = new("b235ae9a-1d64-49b8-a44c-5ff3d9095045");
     private static readonly Guid ConditionRemotePort = new("c35a604d-d22b-4e1a-91b4-68f674ee674b");
+    private static readonly Guid ConditionFlags = new("632ce23b-5167-435c-86d7-e903684aa80c");
+    private const uint FlagIsLoopback = 0x1;
+    private const uint MatchFlagsNoneSet = 8;
 
     private IntPtr _engine;
 
@@ -40,6 +43,42 @@ internal sealed unsafe class WfpSession : IDisposable
     /// 16 bytes (IPv6), in network order.
     /// </summary>
     public List<ulong> BlockEndpoint(string exePath, byte[] address, ushort port) => Add(exePath, address, port);
+
+    /// <summary>Blocks all non-loopback traffic of every program (IPv4 and IPv6, connect and accept).</summary>
+    public List<ulong> BlockAll()
+    {
+        var ids = new List<ulong>();
+        var name = Marshal.StringToHGlobalUni("WebLimiter (tout bloquer)");
+        try
+        {
+            var condition = new Condition0
+            {
+                FieldKey = ConditionFlags,
+                MatchType = MatchFlagsNoneSet,
+                Value = new Value0 { Type = 3, Data = FlagIsLoopback }, // FWP_UINT32
+            };
+            foreach (var layer in LayersV4.Concat(LayersV6))
+            {
+                var filter = new Filter0
+                {
+                    DisplayName = name,
+                    LayerKey = layer,
+                    NumConditions = 1,
+                    Conditions = (IntPtr)(&condition),
+                    ActionType = 0x1001, // FWP_ACTION_BLOCK
+                };
+                int rc = FwpmFilterAdd0(_engine, &filter, IntPtr.Zero, out ulong id);
+                if (rc != 0)
+                {
+                    Remove(ids);
+                    throw new InvalidOperationException($"FwpmFilterAdd0 a échoué (0x{rc:X}).");
+                }
+                ids.Add(id);
+            }
+        }
+        finally { Marshal.FreeHGlobal(name); }
+        return ids;
+    }
 
     private List<ulong> Add(string exePath, byte[]? address, ushort port)
     {

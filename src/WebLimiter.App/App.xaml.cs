@@ -22,6 +22,7 @@ public partial class App : Application
     private MainWindow? _window;
     private Forms.NotifyIcon? _tray;
     private Forms.ToolStripMenuItem? _toggleItem;
+    private Forms.ToolStripMenuItem? _blockItem;
     private bool _trayHintShown;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -126,6 +127,8 @@ public partial class App : Application
         _toggleItem = new Forms.ToolStripMenuItem("Suspendre le filtrage", null, (_, _) =>
             _vm!.ToggleEngineCommand.Execute(null));
         menu.Items.Add(_toggleItem);
+        _blockItem = new Forms.ToolStripMenuItem("Bloquer Internet", null, (_, _) => _vm!.ToggleGlobalBlock());
+        menu.Items.Add(_blockItem);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add("Quitter", null, (_, _) => ExitApp());
 
@@ -146,6 +149,7 @@ public partial class App : Application
         string text = _vm.IsRunning ? $"WebLimiter\n↓ {_vm.TotalDownText}\n↑ {_vm.TotalUpText}" : "WebLimiter (suspendu)";
         _tray.Text = text.Length > 63 ? text[..63] : text;
         _toggleItem!.Text = _vm.IsRunning ? "Suspendre le filtrage" : "Reprendre le filtrage";
+        _blockItem!.Checked = _vm.Global.Blocked;
     }
 
     public void ShowWindow()

@@ -12,6 +12,8 @@ namespace WebLimiter.Core.Engine;
 internal sealed class QosLimiter
 {
     private const string Prefix = "WebLimiter_";
+    /// <summary>Key of the policy matching all TCP and UDP traffic (global upload limit).</summary>
+    public const string AllTraffic = "*";
 
     private readonly Dictionary<string, long> _applied = new(StringComparer.OrdinalIgnoreCase);
 
@@ -29,7 +31,10 @@ internal sealed class QosLimiter
         {
             if (_applied.ContainsKey(path)) continue;
             long bits = Math.Max(8000, rate * 8);
-            script.AppendLine($"New-NetQosPolicy -Name '{PolicyName(path)}' -AppPathNameMatchCondition '{path.Replace("'", "''")}' " +
+            string match = path == AllTraffic
+                ? "-IPProtocolMatchCondition Both"
+                : $"-AppPathNameMatchCondition '{path.Replace("'", "''")}'";
+            script.AppendLine($"New-NetQosPolicy -Name '{PolicyName(path)}' {match} " +
                               $"-ThrottleRateActionBitsPerSecond {bits} -PolicyStore ActiveStore | Out-Null");
             _applied[path] = rate;
         }

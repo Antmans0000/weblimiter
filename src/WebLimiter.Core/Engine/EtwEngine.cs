@@ -8,15 +8,16 @@ namespace WebLimiter.Core.Engine;
 
 /// <summary>
 /// Driverless engine for machines where WinDivert cannot load (Windows on ARM64): traffic is measured
-/// from ETW kernel network events, blocking uses WFP filters and upload limits use QoS policies.
-/// Download limits and the global rate limits cannot be enforced; the global quota can (it blocks or
-/// throttles each app).
+/// from ETW kernel network events, blocking uses WFP filters and upload limits use QoS policies
+/// (the global upload limit is one policy matching all traffic). Download limits cannot be enforced:
+/// Windows offers no user-mode way to delay incoming packets.
 /// </summary>
 public sealed unsafe class EtwEngine : EngineBase
 {
     private readonly QosLimiter _qos = new();
     private readonly Dictionary<string, List<ulong>> _blocks = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, EndpointBlock> _endpoints = new();
+    private List<ulong>? _blockAll;
     private readonly object _enforceLock = new();
     private EtwSession? _etw;
     private WfpSession? _wfp;
@@ -68,6 +69,7 @@ public sealed unsafe class EtwEngine : EngineBase
             _wfp?.Dispose();
             _wfp = null;
             _blocks.Clear();
+            _blockAll = null;
             _endpoints.Clear();
             _qos.ClearAll();
         }
@@ -174,6 +176,7 @@ public sealed unsafe class EtwEngine : EngineBase
                 if (_dirty)
                 {
                     _dirty = false;
+                    ReconcileGlobalBlock();
                     ReconcileBlocks();
                     _qos.Apply(DesiredUploadLimits());
                 }
@@ -201,6 +204,19 @@ public sealed unsafe class EtwEngine : EngineBase
             try { ep.Ids = _wfp!.BlockEndpoint(ep.Exe, ep.Address, ep.Port); }
             catch (Exception ex) { DataPaths.LogError($"Blocage de destination impossible ({key})", ex); }
         }
+    }
+
+    private void ReconcileGlobalBlock()
+    {
+        if (GlobalBlocked == (_blockAll != null)) return;
+        if (_blockAll != null)
+        {
+            _wfp!.Remove(_blockAll);
+            _blockAll = null;
+            return;
+        }
+        try { _blockAll = _wfp!.BlockAll(); }
+        catch (Exception ex) { DataPaths.LogError("Blocage global impossible", ex); }
     }
 
     private void ReconcileBlocks()
@@ -250,6 +266,7 @@ public sealed unsafe class EtwEngine : EngineBase
             if (rule.UpLimitEnabled) Add(rule.AppPath, rule.UpLimitBytesPerSec);
         foreach (var app in AppList)
             if (app.Services.Length == 0) Add(app.Path, app.UpShaper.Rate);
+        if (GlobalUp.Rate > 0) limits[QosLimiter.AllTraffic] = GlobalUp.Rate;
         return limits;
     }
 }
