@@ -406,37 +406,108 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="180" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="200" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
+                    <!-- Period -->
                     <DockPanel Grid.Row="0" LastChildFill="False">
-                        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                            <RadioButton Style="{StaticResource Segment}" Content="Aujourd'hui"
-                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Today}" />
-                            <RadioButton Style="{StaticResource Segment}" Content="Hier"
-                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Yesterday}" />
-                            <RadioButton Style="{StaticResource Segment}" Content="7 jours"
-                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Last7Days}" />
-                            <RadioButton Style="{StaticResource Segment}" Content="Ce mois"
-                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=ThisMonth}" />
-                            <RadioButton Style="{StaticResource Segment}" Content="Mois dernier"
-                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=LastMonth}" />
-                            <RadioButton Style="{StaticResource Segment}" Content="12 mois"
-                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Last12Months}" />
-                        </StackPanel>
                         <Button DockPanel.Dock="Right" Content="Effacer l'historique…" Click="ClearStats_Click" />
+                        <Button DockPanel.Dock="Right" Content="Exporter CSV…" Margin="0,0,8,0" Click="ExportStats_Click" />
                         <Button DockPanel.Dock="Right" Content="Actualiser" Margin="0,0,8,0" Click="RefreshStats_Click" />
+                        <WrapPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                            <RadioButton Style="{StaticResource Segment}" Content="24 h" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Last24Hours}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="Aujourd'hui" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Today}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="Hier" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Yesterday}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="7 jours" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Last7Days}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="14 jours" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Last14Days}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="30 jours" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Last30Days}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="Ce mois" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=ThisMonth}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="Mois dernier" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=LastMonth}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="12 mois" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Last12Months}" />
+                            <RadioButton Style="{StaticResource Segment}" Content="Personnalisé" GroupName="StatsPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Custom}" />
+                        </WrapPanel>
                     </DockPanel>
 
-                    <TextBlock Grid.Row="1" Text="{Binding Summary}" Margin="2,14,0,8" FontSize="14" />
+                    <!-- Range, scale, direction -->
+                    <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
+                        <TextBlock Text="Du" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                        <TextBox Width="130" Text="{Binding FromText}" KeyDown="LimitBox_KeyDown"
+                                 ToolTip="Début : 13/11/2026 08:00, 13/11 8h ou 13/11/2026 — Entrée pour valider" />
+                        <TextBlock Text="au" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="8,0,6,0" />
+                        <TextBox Width="130" Text="{Binding ToText}" KeyDown="LimitBox_KeyDown"
+                                 ToolTip="Fin (exclue) : 13/11/2026 18:00 ; une date seule va jusqu'à la fin du jour — Entrée pour valider" />
+                        <TextBlock Text="{Binding RangeError}" Foreground="{StaticResource Danger}" VerticalAlignment="Center" Margin="10,0,0,0"
+                                   Visibility="{Binding RangeError, Converter={StaticResource NullToCollapsed}}" />
+                        <TextBlock Text="Échelle" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="24,0,8,0" />
+                        <RadioButton Style="{StaticResource Segment}" Content="Auto" GroupName="StatsScale"
+                                         IsChecked="{Binding Scale, Converter={StaticResource EnumEquals}, ConverterParameter=Auto}" />
+                        <RadioButton Style="{StaticResource Segment}" Content="Heure" GroupName="StatsScale"
+                                         IsChecked="{Binding Scale, Converter={StaticResource EnumEquals}, ConverterParameter=Hour}" />
+                        <RadioButton Style="{StaticResource Segment}" Content="Jour" GroupName="StatsScale"
+                                         IsChecked="{Binding Scale, Converter={StaticResource EnumEquals}, ConverterParameter=Day}" />
+                        <RadioButton Style="{StaticResource Segment}" Content="Mois" GroupName="StatsScale"
+                                         IsChecked="{Binding Scale, Converter={StaticResource EnumEquals}, ConverterParameter=Month}" />
+                        <TextBlock Text="Graphe" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="24,0,8,0" />
+                        <RadioButton Style="{StaticResource Segment}" Content="↓ + ↑" GroupName="StatsDirection"
+                                         IsChecked="{Binding Direction, Converter={StaticResource EnumEquals}, ConverterParameter=Both}" />
+                        <RadioButton Style="{StaticResource Segment}" Content="↓ Reçu" GroupName="StatsDirection"
+                                         IsChecked="{Binding Direction, Converter={StaticResource EnumEquals}, ConverterParameter=Down}" />
+                        <RadioButton Style="{StaticResource Segment}" Content="↑ Envoyé" GroupName="StatsDirection"
+                                         IsChecked="{Binding Direction, Converter={StaticResource EnumEquals}, ConverterParameter=Up}" />
+                    </WrapPanel>
 
-                    <Border Grid.Row="2" Background="{StaticResource Panel}" CornerRadius="8" Padding="12,8">
-                        <c:DailyBars Days="{Binding Days}" />
+                    <!-- App filters -->
+                    <DockPanel Grid.Row="2" Margin="0,10,0,0" LastChildFill="False">
+                        <Grid DockPanel.Dock="Left" Width="240">
+                            <TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged, Delay=300}" Padding="26,4,6,4"
+                                     ToolTip="Filtrer par nom ou chemin ; sans sélection, le graphe suit ce filtre" />
+                            <TextBlock Text="⌕" Foreground="{StaticResource Muted}" FontSize="15" Margin="9,0,0,1"
+                                       VerticalAlignment="Center" IsHitTestVisible="False" />
+                        </Grid>
+                        <CheckBox DockPanel.Dock="Left" Content="Masquer Windows et les services" Margin="16,0,0,0"
+                                  IsChecked="{Binding HideSystem}" Foreground="{StaticResource Muted}" VerticalAlignment="Center" />
+                        <TextBlock DockPanel.Dock="Left" Text="{Binding ChartScope}" Foreground="{StaticResource Muted}" Margin="16,0,0,0" VerticalAlignment="Center" />
+                        <Button DockPanel.Dock="Left" Content="Tout afficher" Margin="10,0,0,0" Click="StatsClearSelection_Click"
+                                Visibility="{Binding HasSelection, Converter={StaticResource BoolToVis}}" />
+                    </DockPanel>
+
+                    <StackPanel Grid.Row="3" Margin="2,12,0,8">
+                        <TextBlock FontSize="14">
+                            <Run Text="{Binding Summary, Mode=OneWay}" />
+                            <Run Text="    —    " Foreground="{StaticResource Muted}" />
+                            <Run Text="{Binding RangeText, Mode=OneWay}" Foreground="{StaticResource Muted}" />
+                        </TextBlock>
+                        <TextBlock Text="{Binding Note}" Foreground="{StaticResource Up}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Visibility="{Binding Note, Converter={StaticResource NullToCollapsed}}" />
+                    </StackPanel>
+
+                    <Border Grid.Row="4" Background="{StaticResource Panel}" CornerRadius="8" Padding="12,8">
+                        <c:DailyBars x:Name="StatsChart" Days="{Binding Days}" Granularity="{Binding Granularity}" />
                     </Border>
 
-                    <DataGrid Grid.Row="3" ItemsSource="{Binding Rows}" Margin="0,12,0,0">
+                    <DataGrid Grid.Row="5" ItemsSource="{Binding Rows}" Margin="0,12,0,0">
                         <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Graphe" Width="58" SortMemberPath="IsSelected">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}" Click="StatsSelect_Click"
+                                                  HorizontalAlignment="Center" ToolTip="Afficher cette application dans le graphe et les totaux" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="Application" Width="*" SortMemberPath="Name">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
@@ -468,6 +539,20 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Pic ↓" Width="95" SortMemberPath="PeakDown">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding PeakDownText}" Foreground="{StaticResource Muted}" Style="{StaticResource RightCell}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="Pic ↑" Width="95" SortMemberPath="PeakUp">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding PeakUpText}" Foreground="{StaticResource Muted}" Style="{StaticResource RightCell}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTemplateColumn Header="" Width="190" CanUserSort="False">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
@@ -492,6 +577,8 @@
 
                     <DockPanel Grid.Row="0" LastChildFill="False">
                         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                            <RadioButton Style="{StaticResource Segment}" Content="24 h" GroupName="PeakPeriod"
+                                         IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Last24Hours}" />
                             <RadioButton Style="{StaticResource Segment}" Content="Aujourd'hui" GroupName="PeakPeriod"
                                          IsChecked="{Binding Period, Converter={StaticResource EnumEquals}, ConverterParameter=Today}" />
                             <RadioButton Style="{StaticResource Segment}" Content="Hier" GroupName="PeakPeriod"
@@ -511,7 +598,7 @@
                     <StackPanel Grid.Row="1" Margin="2,14,0,8">
                         <TextBlock Text="{Binding PeakSummary}" FontSize="14" />
                         <TextBlock Foreground="{StaticResource Muted}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap"
-                                   Text="Débit le plus élevé mesuré sur une seconde, par application, en réception et en envoi. Enregistré depuis la version 0.3." />
+                                   Text="Débit le plus élevé mesuré sur une seconde, par application, en réception et en envoi. Enregistré depuis la version 0.3, à l'heure près depuis la 0.4." />
                     </StackPanel>
 
                     <DataGrid Grid.Row="2" ItemsSource="{Binding PeakRows}">

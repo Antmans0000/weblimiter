@@ -7,10 +7,11 @@ using System.Windows.Input;
 using System.Windows.Media;
 using WebLimiter.App.Util;
 using WebLimiter.App.ViewModels;
+using WebLimiter.Core.Storage;
 
 namespace WebLimiter.App.Controls;
 
-/// <summary>Stacked daily bars (download + upload) with a hover read-out.</summary>
+/// <summary>Stacked bars (download + upload) per hour, day or month, with a hover read-out.</summary>
 public sealed class DailyBars : FrameworkElement
 {
     public static readonly DependencyProperty DaysProperty = DependencyProperty.Register(
@@ -21,6 +22,28 @@ public sealed class DailyBars : FrameworkElement
     {
         get => (IReadOnlyList<DayBar>?)GetValue(DaysProperty);
         set => SetValue(DaysProperty, value);
+    }
+
+    public static readonly DependencyProperty GranularityProperty = DependencyProperty.Register(
+        nameof(Granularity), typeof(StatsGranularity), typeof(DailyBars),
+        new FrameworkPropertyMetadata(StatsGranularity.Day, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    /// <summary>What one bar covers; drives the labels.</summary>
+    public StatsGranularity Granularity
+    {
+        get => (StatsGranularity)GetValue(GranularityProperty);
+        set => SetValue(GranularityProperty, value);
+    }
+
+    /// <summary>Raised when a bar is double-clicked, with the start of its bucket.</summary>
+    public event Action<DateTime>? BarActivated;
+
+    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
+    {
+        var days = Days;
+        if (e.ClickCount != 2 || days == null || days.Count == 0) return;
+        int i = Math.Clamp((int)(e.GetPosition(this).X / (ActualWidth / days.Count)), 0, days.Count - 1);
+        BarActivated?.Invoke(days[i].Day);
     }
 
     private static readonly Brush Down = Frozen(Color.FromRgb(0x22, 0xC5, 0x5E));
@@ -75,7 +98,7 @@ public sealed class DailyBars : FrameworkElement
 
             if (i % labelEvery == 0 || i == days.Count - 1)
             {
-                var ft = Ft(d.Day.ToString("dd/MM"), Muted, 10, dpi);
+                var ft = Ft(Label(days, i), Muted, 10, dpi);
                 dc.DrawText(ft, new Point(i * slot + (slot - ft.Width) / 2, h - labelH + 2));
             }
         }
@@ -83,9 +106,30 @@ public sealed class DailyBars : FrameworkElement
         if (_hover >= 0 && _hover < days.Count)
         {
             var d = days[_hover];
-            var ft = Ft($"{d.Day:dddd d MMMM}   ↓ {Format.Bytes(d.Down)}   ↑ {Format.Bytes(d.Up)}", Text, 12, dpi);
+            string when = Granularity switch
+            {
+                StatsGranularity.Hour => d.Day.ToString("dddd d MMMM, HH:00", Fr) + d.Day.AddHours(1).ToString(" – HH:00", Fr),
+                StatsGranularity.Month => d.Day.ToString("MMMM yyyy", Fr),
+                _ => d.Day.ToString("dddd d MMMM yyyy", Fr),
+            };
+            string hint = Granularity == StatsGranularity.Hour ? "" : "   (double-clic : détail)";
+            var ft = Ft($"{when}   ↓ {Format.Bytes(d.Down)}   ↑ {Format.Bytes(d.Up)}   Total {Format.Bytes(d.Down + d.Up)}{hint}", Text, 12, dpi);
             dc.DrawText(ft, new Point(0, 0));
         }
+    }
+
+    private static readonly CultureInfo Fr = CultureInfo.GetCultureInfo("fr-FR");
+
+    /// <summary>Axis label; hourly bars show the date at midnight.</summary>
+    private string Label(IReadOnlyList<DayBar> days, int i)
+    {
+        var t = days[i].Day;
+        return Granularity switch
+        {
+            StatsGranularity.Hour => i == 0 || t.Hour == 0 ? t.ToString("dd/MM", Fr) : t.ToString("HH'h'", Fr),
+            StatsGranularity.Month => t.ToString("MMM yy", Fr),
+            _ => t.ToString("dd/MM", Fr),
+        };
     }
 
     private static FormattedText Ft(string s, Brush b, double size, double dpi) =>

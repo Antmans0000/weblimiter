@@ -23,6 +23,8 @@ public interface IBackend : IDisposable
     /// <summary>All traffic over a date range, with the highest total rates.</summary>
     AppUsage GetTotalUsage(DateTime? from, DateTime to);
     IReadOnlyList<DayUsage> GetDaily(DateTime from, DateTime to);
+    /// <summary>Hour-precise statistics: per-app totals and a time series.</summary>
+    StatsResult QueryStats(StatsQuery query);
     void ClearStats();
     void SetFiltering(bool enabled);
 }
@@ -55,6 +57,7 @@ public sealed class LocalBackend : IBackend
     public IReadOnlyList<AppUsage> GetUsageByApp(DateTime? from, DateTime to) => _engine.Stats.GetAllApps(from, to);
     public AppUsage GetTotalUsage(DateTime? from, DateTime to) => _engine.Stats.GetTotal(from, to);
     public IReadOnlyList<DayUsage> GetDaily(DateTime from, DateTime to) => _engine.Stats.GetDaily(from, to);
+    public StatsResult QueryStats(StatsQuery query) => _engine.Stats.Query(query);
     public void ClearStats() => _engine.Stats.Clear();
 
     public void SetFiltering(bool enabled)

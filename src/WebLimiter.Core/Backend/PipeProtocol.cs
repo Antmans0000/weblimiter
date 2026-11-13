@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WebLimiter.Core.Model;
+using WebLimiter.Core.Storage;
 
 namespace WebLimiter.Core.Backend;
 
@@ -23,6 +24,7 @@ internal sealed class PipeRequest
     public DateTime? From { get; set; }
     public DateTime To { get; set; }
     public bool Enabled { get; set; }
+    public StatsQuery? Query { get; set; }
 }
 
 internal sealed class PipeResponse

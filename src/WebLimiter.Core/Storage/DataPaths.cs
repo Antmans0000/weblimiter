@@ -10,6 +10,7 @@ public static class DataPaths
 
     public static string Rules => Path.Combine(Root, "rules.json");
     public static string Stats => Path.Combine(Root, "stats.json");
+    public static string Hourly => Path.Combine(Root, "hourly");
     public static string Log => Path.Combine(Root, "weblimiter.log");
 
     internal static readonly JsonSerializerOptions Json = new()

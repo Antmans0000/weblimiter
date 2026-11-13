@@ -62,6 +62,9 @@ public sealed class PipeBackend : IBackend
     public IReadOnlyList<DayUsage> GetDaily(DateTime from, DateTime to) =>
         Call<List<DayUsage>>(new PipeRequest { Op = "Daily", From = from, To = to }) ?? new();
 
+    public StatsResult QueryStats(StatsQuery query) =>
+        Call<StatsResult>(new PipeRequest { Op = "Query", Query = query }) ?? new StatsResult();
+
     public void ClearStats() => Call<object>(new PipeRequest { Op = "ClearStats" });
 
     public void SetFiltering(bool enabled) => Call<object>(new PipeRequest { Op = "SetFiltering", Enabled = enabled });
@@ -154,6 +157,7 @@ public sealed class SwitchableBackend : IBackend
     public IReadOnlyList<AppUsage> GetUsageByApp(DateTime? from, DateTime to) => _current.GetUsageByApp(from, to);
     public AppUsage GetTotalUsage(DateTime? from, DateTime to) => _current.GetTotalUsage(from, to);
     public IReadOnlyList<DayUsage> GetDaily(DateTime from, DateTime to) => _current.GetDaily(from, to);
+    public StatsResult QueryStats(StatsQuery query) => _current.QueryStats(query);
     public void ClearStats() => _current.ClearStats();
     public void SetFiltering(bool enabled) => _current.SetFiltering(enabled);
     public void Dispose() => _current.Dispose();

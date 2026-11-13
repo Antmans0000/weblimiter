@@ -31,6 +31,7 @@ public sealed class StatsStore
     // day "yyyy-MM-dd" -> app path -> usage
     private Dictionary<string, Dictionary<string, Usage>> _days = new();
     private bool _dirty;
+    private readonly HourlyStore _hourly = new();
 
     public static StatsStore Load()
     {
@@ -67,6 +68,7 @@ public sealed class StatsStore
             u.PeakUp = Math.Max(u.PeakUp, (long)upRate);
             _dirty = true;
         }
+        _hourly.Add(appPath, down, up, downRate, upRate, when);
     }
 
     private static bool IsGlobal(string key) => key == AppRule.GlobalKey;
@@ -175,8 +177,117 @@ public sealed class StatsStore
         return list;
     }
 
+    /// <summary>
+    /// Traffic over an hour-precise range. Days recorded before hourly statistics existed only have
+    /// daily totals: they are counted whole and the result is flagged <see cref="StatsResult.Approximate"/>.
+    /// </summary>
+    public StatsResult Query(StatsQuery q)
+    {
+        var from = new DateTime(q.From.Year, q.From.Month, q.From.Day, q.From.Hour, 0, 0);
+        var to = q.To;
+        var result = new StatsResult { HourlySince = _hourly.FirstDay() };
+        if (to <= from) return result;
+
+        HashSet<string>? filter = q.Apps is { Count: > 0 } ? new(q.Apps, StringComparer.OrdinalIgnoreCase) : null;
+        var agg = new Dictionary<string, Usage>(StringComparer.OrdinalIgnoreCase);
+        var buckets = new SortedDictionary<DateTime, long[]>();
+        for (var t = BucketStart(from, q.Granularity); t < to; t = NextBucket(t, q.Granularity)) buckets[t] = new long[2];
+        long selDown = 0, selUp = 0, selPeakDown = 0, selPeakUp = 0, allPeakDown = 0, allPeakUp = 0;
+
+        void Count(string path, Usage u, DateTime when)
+        {
+            if (IsGlobal(path))
+            {
+                allPeakDown = Math.Max(allPeakDown, u.PeakDown);
+                allPeakUp = Math.Max(allPeakUp, u.PeakUp);
+                return;
+            }
+            if (!agg.TryGetValue(path, out var a)) agg[path] = a = new Usage();
+            a.Down += u.Down;
+            a.Up += u.Up;
+            a.PeakDown = Math.Max(a.PeakDown, u.PeakDown);
+            a.PeakUp = Math.Max(a.PeakUp, u.PeakUp);
+            if (filter != null && !filter.Contains(path)) return;
+            selDown += u.Down;
+            selUp += u.Up;
+            selPeakDown = Math.Max(selPeakDown, u.PeakDown);
+            selPeakUp = Math.Max(selPeakUp, u.PeakUp);
+            if (buckets.TryGetValue(BucketStart(when, q.Granularity), out var b))
+            {
+                b[0] += u.Down;
+                b[1] += u.Up;
+            }
+        }
+
+        for (var day = from.Date; day < to; day = day.AddDays(1))
+        {
+            Dictionary<string, Usage>? daily;
+            lock (_lock) daily = _days.TryGetValue(DayKey(day), out var d) ? CloneDay(d) : null;
+            var dayStart = day < from ? from : day;
+            var hours = _hourly.Day(day);
+            if (hours == null)
+            {
+                if (daily == null) continue;
+                if (day < from || day.AddDays(1) > to || q.Granularity == StatsGranularity.Hour) result.Approximate = true;
+                foreach (var (path, u) in daily) Count(path, u, dayStart);
+                continue;
+            }
+
+            var hourlySum = new Dictionary<string, Usage>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (h, apps) in hours)
+            {
+                var t = day.AddHours(h);
+                foreach (var (path, u) in apps)
+                {
+                    if (!hourlySum.TryGetValue(path, out var sum)) hourlySum[path] = sum = new Usage();
+                    sum.Down += u.Down;
+                    sum.Up += u.Up;
+                    if (t >= from && t < to) Count(path, u, t);
+                }
+            }
+            // The day hourly statistics started also holds traffic counted earlier that day, hour unknown.
+            if (daily == null) continue;
+            foreach (var (path, u) in daily)
+            {
+                if (IsGlobal(path)) continue;
+                var sum = hourlySum.GetValueOrDefault(path);
+                long down = u.Down - (sum?.Down ?? 0), up = u.Up - (sum?.Up ?? 0);
+                if (down + up < 64 * 1024) continue;
+                result.Approximate = true;
+                Count(path, new Usage { Down = Math.Max(0, down), Up = Math.Max(0, up) }, dayStart);
+            }
+        }
+
+        result.Apps = agg.Select(kv => new AppUsage(kv.Key, kv.Value.Down, kv.Value.Up, kv.Value.PeakDown, kv.Value.PeakUp))
+            .OrderByDescending(a => a.Total).ToList();
+        result.Series = buckets.Select(kv => new StatsBucket(kv.Key, kv.Value[0], kv.Value[1])).ToList();
+        result.Selected = filter == null
+            ? new AppUsage(AppRule.GlobalKey, selDown, selUp, allPeakDown, allPeakUp)
+            : new AppUsage(AppRule.GlobalKey, selDown, selUp, selPeakDown, selPeakUp);
+        return result;
+    }
+
+    private static Dictionary<string, Usage> CloneDay(Dictionary<string, Usage> day) =>
+        day.ToDictionary(kv => kv.Key, kv => new Usage { Down = kv.Value.Down, Up = kv.Value.Up, PeakDown = kv.Value.PeakDown, PeakUp = kv.Value.PeakUp },
+            StringComparer.OrdinalIgnoreCase);
+
+    public static DateTime BucketStart(DateTime t, StatsGranularity g) => g switch
+    {
+        StatsGranularity.Hour => new DateTime(t.Year, t.Month, t.Day, t.Hour, 0, 0),
+        StatsGranularity.Month => new DateTime(t.Year, t.Month, 1),
+        _ => t.Date,
+    };
+
+    public static DateTime NextBucket(DateTime t, StatsGranularity g) => g switch
+    {
+        StatsGranularity.Hour => t.AddHours(1),
+        StatsGranularity.Month => t.AddMonths(1),
+        _ => t.AddDays(1),
+    };
+
     public void Save()
     {
+        _hourly.Save();
         string json;
         lock (_lock)
         {
@@ -191,6 +302,7 @@ public sealed class StatsStore
     public void Clear()
     {
         lock (_lock) { _days.Clear(); _dirty = true; }
+        _hourly.Clear();
         Save();
     }
 }

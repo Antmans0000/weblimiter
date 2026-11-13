@@ -25,6 +25,7 @@ public partial class MainWindow : Window
         _vm = vm;
         DataContext = vm;
         vm.Refreshed += () => Graph.Invalidate();
+        StatsChart.BarActivated += start => vm.Stats.DrillDown(start);
 
         _timer = new DispatcherTimer(TimeSpan.FromSeconds(1), DispatcherPriority.Background, (_, _) => vm.Refresh(), Dispatcher);
         _timer.Start();
@@ -170,6 +171,29 @@ public partial class MainWindow : Window
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{_vm.Settings.DataFolder}\""));
 
     private void RefreshStats_Click(object sender, RoutedEventArgs e) => _vm.Stats.Refresh();
+
+    private void StatsSelect_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is StatsRow row) _vm.Stats.ToggleSelection(row.Path);
+    }
+
+    private void StatsClearSelection_Click(object sender, RoutedEventArgs e) => _vm.Stats.ClearSelection();
+
+    private void ExportStats_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Exporter les statistiques",
+            Filter = "CSV (*.csv)|*.csv",
+            FileName = _vm.Stats.SuggestedFileName,
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        try { _vm.Stats.ExportCsv(dialog.FileName); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "Export impossible : " + ex.Message, "WebLimiter", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private void ClearStats_Click(object sender, RoutedEventArgs e)
     {
