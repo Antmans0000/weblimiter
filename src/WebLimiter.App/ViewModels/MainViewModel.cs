@@ -119,13 +119,12 @@ public sealed class MainViewModel : ObservableObject
 
     public string VersionText => $"WebLimiter {Updater.CurrentVersion.ToString(3)} — " + (IsArm64 ? "moteur ETW" : "moteur WinDivert");
 
-    public string LimitsHint => CanLimitDownload
-        ? "Ko/s — Entrée pour valider"
-        : "Ko/s — Entrée pour valider — réception non limitable sur ARM64 ⓘ";
+    public bool ShowArmNotice => IsArm64;
 
-    public string? LimitsHintDetail => CanLimitDownload ? null :
+    public string ArmNoticeDetail =>
         "Sur Windows ARM64, le pilote WinDivert ne peut pas être chargé : WebLimiter utilise le pare-feu (WFP) et les stratégies QoS de Windows.\n" +
         "Le blocage, les quotas et les limites d'envoi fonctionnent ; Windows ne permet pas de ralentir la réception sans pilote.\n" +
+        "Pour les mises à jour Windows / Office : Paramètres → « Téléchargements des mises à jour ».\n" +
         "La limite d'envoi globale ne s'ajoute pas à celle d'une application qui a sa propre limite d'envoi.";
 
     private bool _isGlobalBlocked;

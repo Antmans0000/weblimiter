@@ -111,7 +111,7 @@
                                          Tag="Compact" Checked="Layout_Checked" ToolTip="Débits et consommation seulement, sans les colonnes de règles" />
                         </StackPanel>
                         <TextBlock DockPanel.Dock="Right" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,16,0"
-                                   Text="{Binding LimitsHint}" ToolTip="{Binding LimitsHintDetail}" />
+                                   Text="Ko/s — Entrée pour valider" />
                     </DockPanel>
 
                     <Grid Grid.Row="1" x:Name="ListArea">
@@ -135,8 +135,13 @@
                                     <ColumnDefinition Width="55" />
                                     <ColumnDefinition Width="17" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"
                                            ToolTip="Limites et quota globaux : ils s'appliquent à toutes les applications ensemble" />
+                                    <TextBlock Text="réception non limitable sur ARM64 ⓘ" Foreground="{StaticResource Up}" FontSize="12" Margin="14,0,0,0"
+                                               VerticalAlignment="Center" ToolTip="{Binding ArmNoticeDetail}" ToolTipService.ShowDuration="30000"
+                                               Visibility="{Binding ShowArmNotice, Converter={StaticResource BoolToVis}}" />
+                                </StackPanel>
                                 <StackPanel Grid.Column="3" Orientation="Horizontal" DataContext="{Binding Global}"
                                             ToolTip="Limite globale de réception (toutes applications)">
                                     <CheckBox IsChecked="{Binding DownLimitEnabled, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,6,0" />
@@ -875,6 +880,21 @@
                                         </Style>
                                     </TextBlock.Style>
                                 </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{StaticResource Panel}" CornerRadius="8" Padding="18,16" Margin="0,12,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Téléchargements des mises à jour" FontSize="15" FontWeight="SemiBold" />
+                                <TextBlock Foreground="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0"
+                                           Text="Limite le débit de l'Optimisation de livraison de Windows : Windows Update, Microsoft Store et Office quand il passe par elle. C'est Windows qui ralentit le téléchargement : la limite fonctionne aussi sur ARM64. Elle ne concerne pas les autres applications. Si le service « Optimisation de livraison » est bloqué dans WebLimiter, Office télécharge lui-même ses mises à jour et cette limite ne s'applique pas." />
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <CheckBox Content="Limiter à" IsChecked="{Binding UpdateLimitEnabled}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBox Style="{StaticResource LimitBox}" Text="{Binding UpdateLimitKb}" />
+                                    <TextBlock Text="Ko/s (Entrée pour valider)" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding UpdateLimitMessage}" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,10,0,0"
+                                           Visibility="{Binding UpdateLimitMessage, Converter={StaticResource NullToCollapsed}}" />
                             </StackPanel>
                         </Border>
 

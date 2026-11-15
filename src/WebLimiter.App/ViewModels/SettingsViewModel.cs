@@ -58,8 +58,58 @@ public sealed class SettingsViewModel : ObservableObject
             ? "Service installé et démarré (démarrage automatique avec Windows, compte Système)."
             : "Service installé mais arrêté.";
 
+    // ---- update downloads (Delivery Optimization) ----------------------------------------
+
+    private bool _updateLimitEnabled;
+    private int _updateLimitKb = 200;
+    private string? _updateLimitMessage;
+
+    public bool UpdateLimitEnabled
+    {
+        get => _updateLimitEnabled;
+        set { if (Set(ref _updateLimitEnabled, value)) ApplyUpdateLimit(); }
+    }
+
+    public int UpdateLimitKb
+    {
+        get => _updateLimitKb;
+        set { if (Set(ref _updateLimitKb, Math.Clamp(value, 1, 1_000_000)) && _updateLimitEnabled) ApplyUpdateLimit(); }
+    }
+
+    public string? UpdateLimitMessage { get => _updateLimitMessage; private set => Set(ref _updateLimitMessage, value); }
+
+    private void ApplyUpdateLimit()
+    {
+        try
+        {
+            DeliveryOptimization.SetLimitKb(_updateLimitEnabled ? _updateLimitKb : null);
+            UpdateLimitMessage = _updateLimitEnabled
+                ? $"Téléchargements des mises à jour limités à {_updateLimitKb} Ko/s."
+                : "Plus de limite sur les téléchargements des mises à jour.";
+        }
+        catch (Exception ex)
+        {
+            UpdateLimitMessage = "Impossible d'écrire la stratégie : " + ex.Message;
+            DataPaths.LogError("Limite de l'Optimisation de livraison", ex);
+        }
+    }
+
+    private void LoadUpdateLimit()
+    {
+        try
+        {
+            int? kb = DeliveryOptimization.GetLimitKb();
+            _updateLimitEnabled = kb != null;
+            if (kb != null) _updateLimitKb = kb.Value;
+        }
+        catch { _updateLimitEnabled = false; }
+        Raise(nameof(UpdateLimitEnabled));
+        Raise(nameof(UpdateLimitKb));
+    }
+
     public void Refresh()
     {
+        LoadUpdateLimit();
         var info = ServiceInstaller.Query();
         ServiceInstalled = info != null;
         ServiceRunning = info?.IsRunning == true;
